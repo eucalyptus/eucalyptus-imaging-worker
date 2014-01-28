@@ -1,16 +1,16 @@
-imaging-servo
+eucalyptus-imaging-service
 ===================
 
 What is this?
 -------------
 
-The *imaging-servo* is a service that is installed in the Eucalyptus
+The *eucalyptus-imaging-service* is a service that is installed in the Eucalyptus
 Imaging EMI.
 
 Prerequisites
 -------------
 
-In order to use *imaging-servo*, you will need a few things:
+In order to use *eucalyptus-imaging-service*, you will need a few things:
 
 * A Eucalyptus EMI on which to install the service
 * ntp
@@ -21,19 +21,19 @@ In order to use *imaging-servo*, you will need a few things:
 Installing from the repository
 ------------------------------
 
-To install the *imaging-servo* package straight from the repository, run:
+To install the *eucalyptus-imaging-service* package straight from the repository, run:
 
-    $ ./install-servo.sh
+    $ ./install-service.sh
 
 This will create various directories and copy configuration files, as well as
-create a *servo* user account.
+create a *imaging-service* user account.
 
 Starting the service
 --------------------
 
-The *imaging-servo* service can be started by running:
+The *eucalyptus-imaging-service* service can be started by running:
 
-    $ service imaging-servo start
+    $ service eucalyptus-imaging-service start
 
 Please Note: This service will **not** work unless it is running on a Eucalyptus
 instance that has been instantiated by the Eucalyptus Balancer service.
