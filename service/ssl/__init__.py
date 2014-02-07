@@ -15,17 +15,4 @@
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
-
-#
-# Order matters here. We want to make sure we initialize logging before anything
-# else happens. We need to initialize the logger that boto will be using.
-#
-from service.logutil import log, set_loglevel
-from service.config import set_pidfile, set_boto_config
-from service.main_loop import ServiceLoop 
-
-__version__ = '1.0.0-dev'
-Version = __version__
-
-def start_service():
-    ServiceLoop().start()
+pass

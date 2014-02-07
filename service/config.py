@@ -27,6 +27,8 @@ CONF_ROOT = "/etc/eucalyptus-imaging-service"
 RUN_ROOT = "/var/lib/eucalyptus-imaging-service"
 SUDO_BIN = "/usr/bin/sudo"
 
+FLOPPY_MOUNT_DIR = "/mnt/floppy"
+
 # Apply default values in case user does not specify
 pidfile = DEFAULT_PIDFILE
 pidroot = DEFAULT_PID_ROOT
@@ -34,7 +36,6 @@ boto_config = None
 cred_provider = None
 user_data_store={}
 QUERY_PERIOD_SEC = 30
-
 def get_provider():
     global boto_config
     global cred_provider
