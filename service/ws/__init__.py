@@ -19,7 +19,6 @@
 import boto
 import httplib
 import boto.utils
-from xml.dom import minidom
 from boto.resultset import ResultSet
 from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
@@ -28,44 +27,55 @@ from service.ssl.server_cert import ServerCertificate
 import time
 import M2Crypto
 from collections import Iterable
+from lxml import objectify
 
-def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None, aws_secret_access_key=None, security_token=None, **kwargs):
-    return EucaEuareConnection(host=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key, security_token=security_token, **kwargs)
+def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
+                  aws_secret_access_key=None, security_token=None, **kwargs):
+    return EucaEuareConnection(host=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
+                               aws_secret_access_key=aws_secret_access_key, security_token=security_token,
+                               **kwargs)
+
 
 def connect_clc(host_name=None, aws_access_key_id=None, aws_secret_access_key=None, port=8773, 
                 path="internal/Imaging", security_token=None, is_secure=True, validate_certs=True):
     region=RegionInfo(name='eucalyptus', endpoint=host_name)
-    return EC2Connection(region=region, port=port, path=path, aws_access_key_id=aws_access_key_id,
+    conn = EC2Connection(region=region, port=port, path=path, aws_access_key_id=aws_access_key_id,
                          aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                          is_secure=is_secure, validate_certs=validate_certs)
+    conn.APIVersion = '2012-12-01' #TODO: set new version?
+    conn.https_validate_certificates = False
+    conn.http_connection_kwargs['timeout'] = 30
+    return conn
 
-class ImagingTask():
-    def __init__(self, task_id):
-        self.task_id = task_id
-    
-class EucaISConnection():
+
+class EucaEC2Connection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
-                 host_name=None, is_secure=False, port=None, path='internal/Imaging',
-                 security_token=None, validate_certs=True):
+                 host_name=None, is_secure=False, path='services/Eucalyptus',
+                 security_token=None, validate_certs=True, port=8773):
+        self.conn = connect_clc(host_name, aws_access_key_id, aws_secret_access_key, port,
+                               path, security_token, is_secure, validate_certs)
+    
+    def attach_volume(self, volume_id, instance_id, device_name):
+        return self.conn.attach_volume(volume_id, instance_id, device_name)
+
+    def detach_volume(self, volume_id):
+        return self.conn.detach_volume(volume_id)
+
+class EucaISConnection(object):
+    def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
+                 host_name=None, is_secure=False, path='internal/Imaging',
+                 security_token=None, validate_certs=True, port=8773):
         self.conn = connect_clc(host_name, aws_access_key_id, aws_secret_access_key, port, 
                                path, security_token, is_secure, validate_certs)
-        self.conn.http_connection_kwargs['timeout'] = 30
 
     def get_import_task(self):
         resp=self.conn.make_request('GetInstanceImportTask', {}, path='/', verb='POST')
         if resp.status != 200:
            raise httplib.HTTPException(resp.status, resp.reason, resp.read())
-        body=resp.read()
-        xmldoc = minidom.parseString(body)
-        importTaskElem = xmldoc.getElementsByTagName('euca:importTaskId')
-        task_id = None
-        
-        if len(importTaskElem)>0 and importTaskElem[0].firstChild:
-            task_id = importTaskElem[0].firstChild.data      
-        if (task_id != None):
-            return ImagingTask(task_id)
-        else:
-            return None
+        root = objectify.XML(resp.read())
+        return { 'task_id': root.importTaskId.text if hasattr(root, 'importTaskId') else None,
+                 'manifestUrl': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
+                 'volumeId': root.volumeId.text if hasattr(root, 'volumeId') else None }
 
     def put_import_task_status(self, task_id=None, status=None, bytes_converted=None):
         if task_id==None or status==None:
@@ -74,6 +84,8 @@ class EucaISConnection():
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
         self.conn.make_request('GetInstanceImportTask', params, path='/', verb='POST')
+
+
 
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
@@ -103,7 +115,8 @@ class EucaEuareConnection(IAMConnection):
         :param delegation_certificate: The certificate to show that this client is delegated to download the user's server certificate
 
         :type auth_signature: string
-        :param auth_signature: The signature by Euare as a proof that the bearer of delegation_certificate is authorized to download server certificate
+        :param auth_signature: The signature by Euare as a proof that the bearer of delegation_certificate is authorized to download server
+                               certificate
  
         """
         timestamp = boto.utils.get_ts()
