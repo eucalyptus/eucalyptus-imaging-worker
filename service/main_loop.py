@@ -44,7 +44,7 @@ class ServiceLoop(object):
                 access_key_id = config.get_access_key_id()
                 secret_access_key = config.get_secret_access_key()
                 security_token = config.get_security_token()
-                con = EucaISConnection(host_name=self.__euca_host, aws_access_key_id=access_key_id,
+                con = service.ws.connect_imaging_service(host_name=self.__euca_host, aws_access_key_id=access_key_id,
                                        aws_secret_access_key=secret_access_key, security_token=security_token)
                 res = con.get_import_task()
                 if res.task_id != None:
@@ -61,15 +61,15 @@ class ServiceLoop(object):
                 service.log.error('Failed to query the imaging service: %s' % err)
 
             start_time = time.time()
-            while time.time() - start_time < config.QUERY_PERIOD_SEC and self.__status == serviceLoop.RUNNING:
+            while time.time() - start_time < config.QUERY_PERIOD_SEC and self.__status == ServiceLoop.RUNNING:
                 service.log.debug('sleeping')
                 time.sleep(10)
 
         service.log.info('Exiting')
-        self.__status = serviceLoop.STOPPED
+        self.__status = ServiceLoop.STOPPED
 
     def stop(self):
-        self.__status = serviceLoop.STOPPING
+        self.__status = ServiceLoop.STOPPING
 
     def status(self):
         return self.__status

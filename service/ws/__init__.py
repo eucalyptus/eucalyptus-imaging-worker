@@ -31,29 +31,32 @@ from lxml import objectify
 
 def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
-    return EucaEuareConnection(host=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
+    return EucaEuareConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                                aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                                **kwargs)
 
+def connect_imaging_service(host_name=None, port=80, path="services/Imaging", aws_access_key_id=None,
+                  aws_secret_access_key=None, security_token=None, **kwargs):
+    return EucaISConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
+                               aws_secret_access_key=aws_secret_access_key, security_token=security_token,
+                               **kwargs)
 
-def connect_clc(host_name=None, aws_access_key_id=None, aws_secret_access_key=None, port=8773, 
-                path="internal/Imaging", security_token=None, is_secure=True, validate_certs=True):
-    region=RegionInfo(name='eucalyptus', endpoint=host_name)
-    conn = EC2Connection(region=region, port=port, path=path, aws_access_key_id=aws_access_key_id,
-                         aws_secret_access_key=aws_secret_access_key, security_token=security_token,
-                         is_secure=is_secure, validate_certs=validate_certs)
-    conn.APIVersion = '2012-12-01' #TODO: set new version?
-    conn.https_validate_certificates = False
-    conn.http_connection_kwargs['timeout'] = 30
-    return conn
-
+def connect_ec2(host_name=None, port=80, path="services/Eucalyptus", aws_access_key_id=None,
+                  aws_secret_access_key=None, security_token=None, **kwargs):
+    return EucaEC2Connection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
+                               aws_secret_access_key=aws_secret_access_key, security_token=security_token,
+                               **kwargs)
 
 class EucaEC2Connection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Eucalyptus',
-                 security_token=None, validate_certs=True, port=8773):
-        self.conn = connect_clc(host_name, aws_access_key_id, aws_secret_access_key, port,
-                               path, security_token, is_secure, validate_certs)
+                 security_token=None, validate_certs=False, port=8773):
+        region=RegionInfo(name='eucalyptus', endpoint=host_name)
+        self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id, 
+                                aws_secret_access_key=aws_secret_access_key, port=port, 
+                                path=path, security_token=security_token, is_secure=is_secure, validate_certs=validate_certs)
+        self.conn.APIVersion = '2013-08-15' #TODO: set new version?
+        self.conn.http_connection_kwargs['timeout'] = 30
     
     def attach_volume(self, volume_id, instance_id, device_name):
         return self.conn.attach_volume(volume_id, instance_id, device_name)
@@ -63,10 +66,14 @@ class EucaEC2Connection(object):
 
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
-                 host_name=None, is_secure=False, path='internal/Imaging',
-                 security_token=None, validate_certs=True, port=8773):
-        self.conn = connect_clc(host_name, aws_access_key_id, aws_secret_access_key, port, 
-                               path, security_token, is_secure, validate_certs)
+                 host_name=None, is_secure=False, path='services/Imaging',
+                 security_token=None, validate_certs=False, port=8773):
+        region=RegionInfo(name='eucalyptus', endpoint=host_name)
+        self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
+                                aws_secret_access_key=aws_secret_access_key, port=port, 
+                                path=path, security_token=security_token, is_secure=is_secure, validate_certs=validate_certs)
+        self.conn.APIVersion = '2014-02-14' #TODO: set new version?
+        self.conn.http_connection_kwargs['timeout'] = 30
 
     def get_import_task(self):
         resp=self.conn.make_request('GetInstanceImportTask', {}, path='/', verb='POST')
@@ -90,7 +97,7 @@ class EucaISConnection(object):
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  is_secure=False, port=None, proxy=None, proxy_port=None,
-                 proxy_user=None, proxy_pass=None, host=None, debug=0, 
+                 proxy_user=None, proxy_pass=None, host_name=None, debug=0, 
                  https_connection_factory=None, path='/', security_token=None, validate_certs=True):
         """
         Euca-specific extension to boto's IAM connection. 
@@ -99,7 +106,7 @@ class EucaEuareConnection(IAMConnection):
                             aws_secret_access_key,
                             is_secure, port, proxy,
                             proxy_port, proxy_user, proxy_pass,
-                            host, debug, https_connection_factory,
+                            host_name, debug, https_connection_factory,
                             path, security_token,
                             validate_certs=validate_certs)
 
