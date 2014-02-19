@@ -90,7 +90,7 @@ class EucaISConnection(object):
         params = {'ImportTaskId':task_id, 'Status': status}
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
-        if volume_id != None
+        if volume_id != None:
             params['VolumeId'] = volume_id
         self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
 
