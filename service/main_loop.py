@@ -56,7 +56,7 @@ class ServiceLoop(object):
                     else:
                         service.log.warn('Processing of the task %s failed' % task.task_id)
                 else:
-                    service.log.info('There is no task to process')
+                    service.log.info('There are no task to process')
             except Exception, err:
                 service.log.error('Failed to query the imaging service: %s' % err)
 

@@ -29,7 +29,8 @@ from service.ws import EucaISConnection
 
 class ImagingTask(object):
     FAILED_STATE  = 'FAILED'
-    UPLOADED_STATE  = 'UPLOADED'
+    DONE_STATE  = 'DONE'
+    EXTANT_STATE = 'EXTANT'
 
     def __init__(self, task_id, manifest_url=None, volume_id=None):
         self.task_id = task_id
@@ -138,7 +139,7 @@ class ImagingTask(object):
                 service.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
                     service.log.error('Device is too small for the image/volume')
-                    is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE)
+                    is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
                     self.detach_volume()
                     return False
             else:
@@ -148,7 +149,7 @@ class ImagingTask(object):
             if device_to_use != None:
                  service.log.info('Detaching volume %s' % self.volume_id)
                  self.detach_volume()
-            # set uploaded state after image.volume was loaded 
-            is_conn.put_import_task_status(self.task_id, ImagingTask.UPLOADED_STATE)
+            # set done state after image.volume was loaded
+            is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id)
         except Exception, err:
             service.log.error('Failed to process task: %s' % err)

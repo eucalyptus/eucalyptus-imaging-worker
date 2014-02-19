@@ -74,16 +74,18 @@ class EucaISConnection(object):
            raise httplib.HTTPException(resp.status, resp.reason, resp.read())
         root = objectify.XML(resp.read())
         return { 'task_id': root.importTaskId.text if hasattr(root, 'importTaskId') else None,
-                 'manifestUrl': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
-                 'volumeId': root.volumeId.text if hasattr(root, 'volumeId') else None }
+                 'manifest_url': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
+                 'volume_id': root.volumeId.text if hasattr(root, 'volumeId') else None }
 
-    def put_import_task_status(self, task_id=None, status=None, bytes_converted=None):
+    def put_import_task_status(self, task_id=None, status=None, volume_id = None, bytes_converted=None):
         if task_id==None or status==None:
             raise RuntimeError("Invalid parameters")
-        params = {'ImportTaskId':taskId, 'Status': status}
+        params = {'ImportTaskId':task_id, 'Status': status}
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
-        self.conn.make_request('GetInstanceImportTask', params, path='/', verb='POST')
+        if volume_id != None
+            params['VolumeId'] = volume_id
+        self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
 
 
 
