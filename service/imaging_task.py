@@ -98,6 +98,17 @@ class ImagingTask(object):
         new_device_name = new_block_devices[0] # can it be different from device_name?
         return new_device_name
 
+    def download_data(self, manifest_url, device_name):
+        #todo: get location from config
+        path_to_download_image = '/tmp/eucatoolkit/stages/downloadimage.py'
+        manifest = manifest_url.replace('imaging@', '')
+        service.log.debug('Calling python %s -m %s -d %s' % (path_to_download_image, manifest, device_name))
+        try:
+            return subprocess.call(['python', path_to_download_image, '-m', manifest, '-d', device_name])
+        except Exception, err:
+            service.log.error('Could not download data from object storage: %s' % err)
+            return 1
+
     def detach_volume(self, timeout_sec=300):
         if self.volume_id == None:
             raise RuntimeError('This import does not have volume id')
@@ -127,7 +138,7 @@ class ImagingTask(object):
                           aws_secret_access_key=config.get_secret_access_key(),
                           port=config.get_clc_port())
         try:
-            # first, check if volume id is provided and try to attach it to the VM
+            done_with_errors = True
             device_to_use = None
             manifest = self.get_manifest()
             if self.volume_id != None:
@@ -142,14 +153,21 @@ class ImagingTask(object):
                     is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
                     self.detach_volume()
                     return False
+                # download image to the block device
+                if self.download_data(self.manifest_url, device_to_use) == 0:
+                    done_with_errors = False
             else:
                 service.log.info('There is no volume id. Importing to Object Storage')
-            # TODO: call download pipe
             # detaching volume
             if device_to_use != None:
                  service.log.info('Detaching volume %s' % self.volume_id)
                  self.detach_volume()
-            # set done state after image.volume was loaded
-            is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id)
+            # set done or error state
+            if done_with_errors:
+                is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
+                return False
+            else:
+                is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id)
+                return True
         except Exception, err:
             service.log.error('Failed to process task: %s' % err)
