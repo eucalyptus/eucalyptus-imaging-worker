@@ -136,7 +136,8 @@ class ImagingTask(object):
         is_conn = EucaISConnection(host_name=config.get_clc_host(),
                           aws_access_key_id=config.get_access_key_id(),
                           aws_secret_access_key=config.get_secret_access_key(),
-                          port=config.get_clc_port())
+                          port=config.get_clc_port(),
+                          path=config.get_imaging_path())
         try:
             done_with_errors = True
             device_to_use = None

@@ -103,7 +103,10 @@ def get_clc_port():
         return val
 
 def get_ec2_path():
-    return get_value('eucalyptus_path')
+    return get_value('ec2_path')
+
+def get_imaging_path():
+    return get_value('imaging_path')
 
 __availability_zone = None
 def get_availability_zone():
