@@ -83,7 +83,7 @@ fi
 %dir %{_var}/run/imaging-worker
 %dir %{_var}/log/imaging-worker
 %dir %{_var}/lib/imaging-worker
-%config(noreplace) %{_sysconfdir}/imaging-worker/boto.cfg
+%config(noreplace) %{_sysconfdir}/imaging-worker/scripts/boto.cfg
 
 %changelog
 * Sat Feb 22 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 1.0.0-0
