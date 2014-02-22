@@ -45,7 +45,7 @@ insert_global $SPECFILE build_id $BUILD_ID
 insert_global $SPECFILE build_version $BUILD_VERSION
 
 rpmbuild --define "_topdir `pwd`/build" \
-    --nodeps -bs build/SPECS/imaging-servo.spec || exit 1
+    --nodeps -bs build/SPECS/eucalyptus-imaging-worker.spec || exit 1
 
 [ ! -d ./rpmfab ] && git clone git://github.com/gholms/rpmfab.git
 
