@@ -56,9 +56,9 @@ install -m 6700 -d $RPM_BUILD_ROOT/%{_var}/{run,lib,log}/imaging-worker
 rm -rf $RPM_BUILD_ROOT
 
 %pre
-getent passwd servo >/dev/null || \
+getent passwd worker >/dev/null || \
     useradd -d %{_var}/lib/imaging-worker \
-    -M -s /sbin/nologin servo
+    -M -s /sbin/nologin worker
 
 # Stop running services for upgrade
 if [ "$1" = "2" ]; then
