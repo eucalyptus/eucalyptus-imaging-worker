@@ -47,7 +47,7 @@ rm -rf $RPM_BUILD_ROOT
 # There is no extension on the installed sudoers file for a reason
 # It will only be read by sudo if there is *no* extension
 #
-install -p -m 0440 -D scripts/worker-sudo.conf $RPM_BUILD_ROOT/%{_sysconfdir}/sudoers.d/worker
+install -p -m 0440 -D scripts/imaging-worker-sudo.conf $RPM_BUILD_ROOT/%{_sysconfdir}/sudoers.d/imaging-worker
 install -p -m 755 -D scripts/imaging-worker-init $RPM_BUILD_ROOT/%{_initddir}/imaging-worker
 install -p -m 755 -D scripts/worker-ntp-update $RPM_BUILD_ROOT%{_libexecdir}/%{name}/ntp-update
 install -m 6700 -d $RPM_BUILD_ROOT/%{_var}/{run,lib,log}/imaging-worker
@@ -73,7 +73,7 @@ fi
 %doc README.md LICENSE
 %{python_sitelib}/*
 %{_bindir}/%{name}
-%{_sysconfdir}/sudoers.d/worker
+%{_sysconfdir}/sudoers.d/imaging-worker
 %{_initddir}/imaging-worker
 %{_libexecdir}/%{name}
 %config(noreplace) %{_sysconfdir}/cron.d/imaging-worker
