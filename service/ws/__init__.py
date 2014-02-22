@@ -28,6 +28,7 @@ import time
 import M2Crypto
 from collections import Iterable
 from lxml import objectify
+import service
 
 def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -54,7 +55,8 @@ class EucaEC2Connection(object):
         region=RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id, 
                                 aws_secret_access_key=aws_secret_access_key, port=port, 
-                                path=path, security_token=security_token, is_secure=is_secure, validate_certs=validate_certs)
+                                path=path, security_token=security_token, is_secure=is_secure,
+                                validate_certs=validate_certs)
         self.conn.APIVersion = '2013-08-15' #TODO: set new version?
         self.conn.http_connection_kwargs['timeout'] = 30
     
@@ -71,7 +73,8 @@ class EucaISConnection(object):
         region=RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
                                 aws_secret_access_key=aws_secret_access_key, port=port, 
-                                path=path, security_token=security_token, is_secure=is_secure, validate_certs=validate_certs)
+                                path=path, security_token=security_token, is_secure=is_secure,
+                                validate_certs=validate_certs)
         self.conn.APIVersion = '2014-02-14' #TODO: set new version?
         self.conn.http_connection_kwargs['timeout'] = 30
 
@@ -84,7 +87,7 @@ class EucaISConnection(object):
                  'manifest_url': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
                  'volume_id': root.volumeId.text if hasattr(root, 'volumeId') else None }
 
-    def put_import_task_status(self, task_id=None, status=None, volume_id = None, bytes_converted=None):
+    def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None):
         if task_id==None or status==None:
             raise RuntimeError("Invalid parameters")
         params = {'ImportTaskId':task_id, 'Status': status}
@@ -92,9 +95,8 @@ class EucaISConnection(object):
             params['BytesConverted'] = bytes_converted
         if volume_id != None:
             params['VolumeId'] = volume_id
+        service.log.debug('Sending %s to PutInstanceImportTaskStatus' % params)
         self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
-
-
 
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,

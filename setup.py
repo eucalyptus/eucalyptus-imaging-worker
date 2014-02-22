@@ -31,7 +31,7 @@ def getVersion():
     except IOError:
         return "0"
 
-setup (name="Eucalyptus Imaging Servo",
+setup (name="Eucalyptus Imaging Worker",
     version = getVersion(),
     description = "Eucalyptus Imaging Servo",
     long_description = "Eucalyptus Imaging Servo",
@@ -39,8 +39,8 @@ setup (name="Eucalyptus Imaging Servo",
     author_email = "community@eucalyptus.com",
     license = "GPL v3",
     url = "http://www.eucalytpus.com",
-    packages = ['servo', 'servo/ws', 'servo/mon'],
-    scripts = ['imaging-servo'],
-    data_files = [('/etc/imaging-servo/',['scripts/boto.cfg'])],
+    packages = ['service', 'service/ws', 'service/floppy', 'service/ssl' ],
+    scripts = ['eucalyptus-imaging-service'],
+    data_files = [('/etc/eucalyptus-imaging-service/',['scripts/boto.cfg'])],
 )
 

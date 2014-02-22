@@ -142,16 +142,16 @@ class ImagingTask(object):
             done_with_errors = True
             device_to_use = None
             manifest = self.get_manifest()
+            image_size = int(manifest.image.size)
             if self.volume_id != None:
                 service.log.info('Attaching volume %s' % self.volume_id)  
                 device_to_use = self.attach_volume()
                 device_size = self.get_partition_size(device_to_use)
-                image_size = int(manifest.image.size)
                 service.log.debug('Attached device size is %d bytes' % device_size)
                 service.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
                     service.log.error('Device is too small for the image/volume')
-                    is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
+                    is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id, 0)
                     self.detach_volume()
                     return False
                 # download image to the block device
@@ -159,6 +159,7 @@ class ImagingTask(object):
                     done_with_errors = False
             else:
                 service.log.info('There is no volume id. Importing to Object Storage')
+                raise RuntimeError('Import to Object Storage is not supported')
             # detaching volume
             if device_to_use != None:
                  service.log.info('Detaching volume %s' % self.volume_id)
@@ -168,7 +169,7 @@ class ImagingTask(object):
                 is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
                 return False
             else:
-                is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id)
+                is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id, image_size)
                 return True
         except Exception, err:
             service.log.error('Failed to process task: %s' % err)
