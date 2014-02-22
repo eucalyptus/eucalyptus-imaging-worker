@@ -79,11 +79,11 @@ fi
 %config(noreplace) %{_sysconfdir}/cron.d/imaging-worker
 
 %defattr(-,worker,worker,-)
-%dir %{_sysconfdir}/imaging-worker
+%dir %{_sysconfdir}/%{name}
 %dir %{_var}/run/imaging-worker
 %dir %{_var}/log/imaging-worker
 %dir %{_var}/lib/imaging-worker
-%config(noreplace) %{_sysconfdir}/%{name}/scripts/boto.cfg
+%config(noreplace) %{_sysconfdir}/%{name}/boto.cfg
 
 %changelog
 * Sat Feb 22 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 1.0.0-0
