@@ -1,4 +1,3 @@
-#
 # Copyright 2009-2014 Eucalyptus Systems, Inc.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,6 +16,16 @@
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
 
-imaging-service ALL = (ALL) ALL
-imaging-service ALL = (root) NOPASSWD: /usr/sbin/haproxy,/bin/kill
+#
+# Order matters here. We want to make sure we initialize logging before anything
+# else happens. We need to initialize the logger that boto will be using.
+#
+from worker.logutil import log, set_loglevel
+from worker.config import set_pidfile, set_boto_config
+from worker.main_loop import WorkerLoop 
 
+__version__ = '1.0.0-dev'
+Version = __version__
+
+def start_worker():
+    WorkerLoop().start()

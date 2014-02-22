@@ -18,10 +18,10 @@
 # additional information or have any questions.
 import time
 import config
-import service
-from service.ws import EucaISConnection
+import worker
+from worker.ws import EucaISConnection
 
-class ServiceLoop(object):
+class WorkerLoop(object):
     STOPPED = "stopped"
     STOPPING = "stopping"
     RUNNING = "running"
@@ -31,42 +31,42 @@ class ServiceLoop(object):
         self.__instance_id = None
         self.__euca_host = config.get_clc_host()
         if self.__instance_id is None:
-            self.__instance_id = config.get_service_id()
+            self.__instance_id = config.get_worker_id()
 
-        self.__status = ServiceLoop.STOPPED
-        service.log.debug('main loop running with clc_host=%s, instance_id=%s' % (self.__euca_host, self.__instance_id))
+        self.__status = WorkerLoop.STOPPED
+        worker.log.debug('main loop running with clc_host=%s, instance_id=%s' % (self.__euca_host, self.__instance_id))
 
     def start(self):
-        self.__status = ServiceLoop.RUNNING 
-        while self.__status == ServiceLoop.RUNNING:
-            service.log.info('Querying for new imaging task')
+        self.__status = WorkerLoop.RUNNING 
+        while self.__status == WorkerLoop.RUNNING:
+            worker.log.info('Querying for new imaging task')
             try:
-                con = EucaISConnection(host_name=service.config.get_clc_host(), aws_access_key_id=config.get_access_key_id(),
+                con = EucaISConnection(host_name=worker.config.get_clc_host(), aws_access_key_id=config.get_access_key_id(),
                           aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
                 res = con.get_import_task()
                 if res['task_id'] != None:
                     task = ImagingTask(res['task_id'], res['manifest_url'], res['volume_id'])
                     # task processing
-                    service.log.info('Processing import task %s' % task.task_id)
+                    worker.log.info('Processing import task %s' % task.task_id)
                     if task.process_task():
-                        service.log.info('Done processing task %s' % task.task_id)
+                        worker.log.info('Done processing task %s' % task.task_id)
                     else:
-                        service.log.warn('Processing of the task %s failed' % task.task_id)
+                        worker.log.warn('Processing of the task %s failed' % task.task_id)
                 else:
-                    service.log.info('There are no task to process')
+                    worker.log.info('There are no task to process')
             except Exception, err:
-                service.log.error('Failed to query the imaging service: %s' % err)
+                worker.log.error('Failed to query the imaging worker: %s' % err)
 
             start_time = time.time()
-            while time.time() - start_time < config.QUERY_PERIOD_SEC and self.__status == ServiceLoop.RUNNING:
-                service.log.debug('sleeping')
+            while time.time() - start_time < config.QUERY_PERIOD_SEC and self.__status == WorkerLoop.RUNNING:
+                worker.log.debug('sleeping')
                 time.sleep(10)
 
-        service.log.info('Exiting')
-        self.__status = ServiceLoop.STOPPED
+        worker.log.info('Exiting')
+        self.__status = WorkerLoop.STOPPED
 
     def stop(self):
-        self.__status = ServiceLoop.STOPPING
+        self.__status = WorkerLoop.STOPPING
 
     def status(self):
         return self.__status

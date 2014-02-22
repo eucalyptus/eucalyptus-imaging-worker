@@ -1,1 +1,0 @@
-@reboot root /bin/bash -c "python /usr/libexec/imaging-servo/ntp-update"

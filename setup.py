@@ -33,14 +33,14 @@ def getVersion():
 
 setup (name="Eucalyptus Imaging Worker",
     version = getVersion(),
-    description = "Eucalyptus Imaging Servo",
-    long_description = "Eucalyptus Imaging Servo",
+    description = "Eucalyptus Imaging Worker",
+    long_description = "Eucalyptus Imaging Worker",
     author = "Vasiliy Kochergin",
     author_email = "community@eucalyptus.com",
     license = "GPL v3",
     url = "http://www.eucalytpus.com",
-    packages = ['service', 'service/ws', 'service/floppy', 'service/ssl' ],
-    scripts = ['eucalyptus-imaging-service'],
-    data_files = [('/etc/eucalyptus-imaging-service/',['scripts/boto.cfg'])],
+    packages = ['worker', 'worker/ws', 'worker/floppy', 'worker/ssl' ],
+    scripts = ['eucalyptus-imaging-worker'],
+    data_files = [('/etc/eucalyptus-imaging-worker/',['scripts/boto.cfg'])],
 )
 

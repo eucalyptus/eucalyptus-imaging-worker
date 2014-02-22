@@ -17,14 +17,14 @@
 # additional information or have any questions.
 import os
 import httplib2
-import service
+import worker
 import boto
 import boto.provider
 
-DEFAULT_PID_ROOT = "/var/run/eucalyptus-imaging-service"
-DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_ROOT, "eucalyptus-imaging-service.pid")
-CONF_ROOT = "/etc/eucalyptus-imaging-service"
-RUN_ROOT = "/var/lib/eucalyptus-imaging-service"
+DEFAULT_PID_ROOT = "/var/run/eucalyptus-imaging-worker"
+DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_ROOT, "eucalyptus-imaging-worker.pid")
+CONF_ROOT = "/etc/eucalyptus-imaging-worker"
+RUN_ROOT = "/var/lib/eucalyptus-imaging-worker"
 SUDO_BIN = "/usr/bin/sudo"
 
 FLOPPY_MOUNT_DIR = "/mnt/floppy"
@@ -118,12 +118,12 @@ def get_availability_zone():
         __availability_zone = content
     return __availability_zone
 
-__service_id = None
-def get_service_id():
-    global __service_id 
-    if __service_id is None:
+__worker_id = None
+def get_worker_id():
+    global __worker_id 
+    if __worker_id is None:
         resp, content = httplib2.Http().request("http://169.254.169.254/latest/meta-data/instance-id")
         if resp['status'] != '200' or len(content) <= 0:
             raise Exception('could not query the metadata for instance id (%s,%s)' % (resp, content))
-        __service_id = content
-    return __service_id
+        __worker_id = content
+    return __worker_id

@@ -20,12 +20,12 @@ import time
 import os
 import string
 import config
-import service
+import worker
 import subprocess
 import httplib2
 from lxml import objectify
-from service.ws import EucaEC2Connection
-from service.ws import EucaISConnection
+from worker.ws import EucaEC2Connection
+from worker.ws import EucaISConnection
 
 class ImagingTask(object):
     FAILED_STATE  = 'FAILED'
@@ -75,20 +75,20 @@ class ImagingTask(object):
         timeout_time = time.time() + timeout_sec
         devices_before = self.get_block_devices()
         device_name = self.next_device_name(devices_before)
-        instance_id = config.get_service_id()
+        instance_id = config.get_worker_id()
 
         ec2 = EucaEC2Connection(host_name=config.get_clc_host(),
                           aws_access_key_id=config.get_access_key_id(),
                           aws_secret_access_key=config.get_secret_access_key(),
                           port=config.get_clc_port(), 
                           path=config.get_ec2_path())
-        service.log.debug('attaching volume {0} to {1} as {2}'.format(self.volume_id, instance_id, device_name))
+        worker.log.debug('attaching volume {0} to {1} as {2}'.format(self.volume_id, instance_id, device_name))
         if not ec2.attach_volume(self.volume_id, instance_id, device_name):
             raise RuntimeError('Can not attach volume {0} to the instance {1}'.format(
                               self.volume_id, instance_id)) #todo: add specific error?
         # wait till we have a new device
         while time.time() < timeout_time and len(devices_before)==len(self.get_block_devices()):
-            service.log.debug('waiting volume attachment')
+            worker.log.debug('waiting volume attachment')
             time.sleep(10)
 
         new_block_devices = self.get_block_devices()
@@ -102,11 +102,11 @@ class ImagingTask(object):
         #todo: get location from config
         path_to_download_image = '/tmp/eucatoolkit/stages/downloadimage.py'
         manifest = manifest_url.replace('imaging@', '')
-        service.log.debug('Calling python %s -m %s -d %s' % (path_to_download_image, manifest, device_name))
+        worker.log.debug('Calling python %s -m %s -d %s' % (path_to_download_image, manifest, device_name))
         try:
             return subprocess.call(['python', path_to_download_image, '-m', manifest, '-d', device_name])
         except Exception, err:
-            service.log.error('Could not download data from object storage: %s' % err)
+            worker.log.error('Could not download data from object storage: %s' % err)
             return 1
 
     def detach_volume(self, timeout_sec=300):
@@ -118,14 +118,14 @@ class ImagingTask(object):
                           aws_secret_access_key=config.get_secret_access_key(),
                           port=config.get_clc_port(), 
                           path=config.get_ec2_path())
-        service.log.debug('detaching volume {0}'.format(self.volume_id))
+        worker.log.debug('detaching volume {0}'.format(self.volume_id))
         devices_before = self.get_block_devices()
         if not ec2.detach_volume(self.volume_id):
             raise RuntimeError('Can not dettach volume {0}'.format(self.volume_id)) #todo: add specific error?
 
         # wait till we have less devices
         while time.time() < timeout_time and len(devices_before)==len(self.get_block_devices()):
-            service.log.debug('waiting volume detachment')
+            worker.log.debug('waiting volume detachment')
             time.sleep(10)
 
         if len(devices_before)==len(self.get_block_devices()):
@@ -144,13 +144,13 @@ class ImagingTask(object):
             manifest = self.get_manifest()
             image_size = int(manifest.image.size)
             if self.volume_id != None:
-                service.log.info('Attaching volume %s' % self.volume_id)  
+                worker.log.info('Attaching volume %s' % self.volume_id)  
                 device_to_use = self.attach_volume()
                 device_size = self.get_partition_size(device_to_use)
-                service.log.debug('Attached device size is %d bytes' % device_size)
-                service.log.debug('Needed for image/volume %d bytes' % image_size)
+                worker.log.debug('Attached device size is %d bytes' % device_size)
+                worker.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
-                    service.log.error('Device is too small for the image/volume')
+                    worker.log.error('Device is too small for the image/volume')
                     is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id, 0)
                     self.detach_volume()
                     return False
@@ -158,11 +158,11 @@ class ImagingTask(object):
                 if self.download_data(self.manifest_url, device_to_use) == 0:
                     done_with_errors = False
             else:
-                service.log.info('There is no volume id. Importing to Object Storage')
+                worker.log.info('There is no volume id. Importing to Object Storage')
                 raise RuntimeError('Import to Object Storage is not supported')
             # detaching volume
             if device_to_use != None:
-                 service.log.info('Detaching volume %s' % self.volume_id)
+                 worker.log.info('Detaching volume %s' % self.volume_id)
                  self.detach_volume()
             # set done or error state
             if done_with_errors:
@@ -172,4 +172,4 @@ class ImagingTask(object):
                 is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id, image_size)
                 return True
         except Exception, err:
-            service.log.error('Failed to process task: %s' % err)
+            worker.log.error('Failed to process task: %s' % err)

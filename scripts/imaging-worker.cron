@@ -1,0 +1,1 @@
+@reboot root /bin/bash -c "python /usr/libexec/eucalyptus-imaging-worker/ntp-update"

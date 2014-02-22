@@ -23,13 +23,13 @@ from logging.handlers import RotatingFileHandler
 # We can't specify the log file in the config module since that will
 # import boto and keep us from initializing the boto logger.
 #
-LOG_FILE = '/var/log/eucalyptus-imaging-service/service.log'
+LOG_FILE = '/var/log/eucalyptus-imaging-worker/worker.log'
 LOG_BYTES = 1024 * 1024 # 1MB
 LOG_FORMAT = "%(asctime)s %(name)s [%(levelname)s]:%(message)s"
 LOG_HANDLER = RotatingFileHandler(LOG_FILE, maxBytes=LOG_BYTES, backupCount=5)
 
 logging.basicConfig(filename=LOG_FILE, format=LOG_FORMAT)
-log = logging.getLogger('service')
+log = logging.getLogger('worker')
 botolog = logging.getLogger('boto')
 log.setLevel(logging.INFO)
 botolog.setLevel(logging.INFO)

@@ -21,8 +21,8 @@
 import os
 import sys
 import getopt
-import service
-import service.config as config
+import worker
+import worker.config as config
 
 
 def daemonize(func=None):
@@ -63,14 +63,14 @@ def daemonize(func=None):
         f.write(str(os.getpid()))
         f.flush()
     except IOError:
-        service.log.error("Failed to write pidfile %s", config.pidfile)
+        worker.log.error("Failed to write pidfile %s", config.pidfile)
         sys.exit(1)
 
     signal.signal(signal.SIGTERM, cleanpid)
     atexit.register(cleanpid)
 
     if func:
-        service.log.info("Starting daemonized service process")
+        worker.log.info("Starting daemonized worker process")
         func()
 
 
@@ -101,22 +101,22 @@ if __name__ == "__main__":
             if arg == "-d" or arg == "--daemonize":
                 daemon = True
             elif arg == "-p" or arg == "--pidfile":
-                service.set_pidfile(value)
+                worker.set_pidfile(value)
             elif arg == "-l" or arg == "--log-level":
-                service.set_loglevel(value)
+                worker.set_loglevel(value)
             elif arg == "-b" or arg == "--boto-config":
-                service.set_boto_config(value)
+                worker.set_boto_config(value)
             elif arg == "-h" or arg == "--help":
                 usage()
     except getopt.GetoptError:
         usage()
 
     if daemon:
-        daemonize(service.start_service)
+        daemonize(worker.start_worker)
     else:
         try:
-            service.log.info("Starting Imaging Service")
-            service.start_service()
+            worker.log.info("Starting Imaging Service")
+            worker.start_worker()
         except KeyboardInterrupt:
-            service.log.info("Interrupted By User")
+            worker.log.info("Interrupted By User")
             sys.exit(0)

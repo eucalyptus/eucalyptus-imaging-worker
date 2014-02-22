@@ -19,8 +19,8 @@ import subprocess
 import commands
 import os
 import json
-import service
-import service.config as config
+import worker
+import worker.config as config
 
 class FloppyCredential(object):
     def __init__(self):
@@ -44,10 +44,10 @@ class FloppyCredential(object):
             self.iam_token = cred['iam_token']  
             self.iam_token = self.iam_token.strip()  
         except IOError, err:
-            service.log.error('failed to read credential file on floppy: '+str(err)) 
+            worker.log.error('failed to read credential file on floppy: '+str(err)) 
             raise Exception()
         except Exception, err:
-            service.log.error('failed to parse credential file: '+str(err))
+            worker.log.error('failed to parse credential file: '+str(err))
             raise Exception()
 
     @staticmethod
@@ -64,7 +64,7 @@ class FloppyCredential(object):
             os.makedirs(dir)
         cmd_line = 'sudo mount %s %s' % (dev,dir)
         if subprocess.call(cmd_line, shell=True) == 0:
-            service.log.debug('floppy disk mounted on '+dir) 
+            worker.log.debug('floppy disk mounted on '+dir) 
         else:
             raise Exception('failed to mount floppy')
 
@@ -74,7 +74,7 @@ class FloppyCredential(object):
             return
         cmd_line = 'sudo umount %s' % dir
         if subprocess.call(cmd_line, shell=True) == 0:
-            service.log.debug('floppy disk unmounted on '+dir) 
+            worker.log.debug('floppy disk unmounted on '+dir) 
         else:
             raise Exception('failed to unmount floppy')
     

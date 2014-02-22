@@ -23,12 +23,12 @@ from boto.resultset import ResultSet
 from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
 from boto.iam.connection import IAMConnection
-from service.ssl.server_cert import ServerCertificate
+from worker.ssl.server_cert import ServerCertificate
 import time
 import M2Crypto
 from collections import Iterable
 from lxml import objectify
-import service
+import worker
 
 def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -36,7 +36,7 @@ def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key
                                aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                                **kwargs)
 
-def connect_imaging_service(host_name=None, port=80, path="services/Imaging", aws_access_key_id=None,
+def connect_imaging_worker(host_name=None, port=80, path="services/Imaging", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaISConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                                aws_secret_access_key=aws_secret_access_key, security_token=security_token,
@@ -95,7 +95,7 @@ class EucaISConnection(object):
             params['BytesConverted'] = bytes_converted
         if volume_id != None:
             params['VolumeId'] = volume_id
-        service.log.debug('Sending %s to PutInstanceImportTaskStatus' % params)
+        worker.log.debug('Sending %s to PutInstanceImportTaskStatus' % params)
         self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
 
 class EucaEuareConnection(IAMConnection):
