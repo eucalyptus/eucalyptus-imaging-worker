@@ -73,6 +73,7 @@ fi
 %{_sysconfdir}/sudoers.d/worker
 %{_initddir}/imaging-worker
 %{_libexecdir}/%{name}
+%config(noreplace) %{_sysconfdir}/cron.d/%{name}
 
 %defattr(-,worker,worker,-)
 %dir %{_sysconfdir}/imaging-worker
