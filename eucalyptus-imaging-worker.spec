@@ -78,11 +78,11 @@ fi
 %{_libexecdir}/%{name}
 %config(noreplace) %{_sysconfdir}/cron.d/imaging-worker
 
-%defattr(-,worker,worker,-)
+%defattr(-,imaging-worker,imaging-worker,-)
 %dir %{_sysconfdir}/%{name}
-%dir %{_var}/run/imaging-worker
-%dir %{_var}/log/imaging-worker
-%dir %{_var}/lib/imaging-worker
+%dir %{_var}/run/%{name}
+%dir %{_var}/log/%{name}
+%dir %{_var}/lib/%{name}
 %config(noreplace) %{_sysconfdir}/%{name}/boto.cfg
 
 %changelog
