@@ -33,7 +33,7 @@ function insert_global()
 
 mkdir -p build/{BUILD,BUILDROOT,SRPMS,RPMS,SOURCES,SPECS}
 
-TARBALL_NAME=imaging-worker-$BUILD_VERSION
+TARBALL_NAME=eucalyptus-imaging-worker-$BUILD_VERSION
 
 cp *.spec build/SPECS
 git archive --format=tar --prefix=$TARBALL_NAME/ HEAD | gzip > build/SOURCES/$TARBALL_NAME.tar.gz
