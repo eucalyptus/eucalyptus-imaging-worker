@@ -52,9 +52,6 @@ install -p -m 755 -D scripts/imaging-worker-init $RPM_BUILD_ROOT/%{_initddir}/im
 install -p -m 755 -D scripts/worker-ntp-update $RPM_BUILD_ROOT%{_libexecdir}/%{name}/ntp-update
 install -m 6700 -d $RPM_BUILD_ROOT/%{_var}/{run,lib,log}/imaging-worker
 
-install -p -m 0750 -D %{name}.cron $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/%{name}
-chmod 0640 $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/%{name}
-
 %clean
 rm -rf $RPM_BUILD_ROOT
 
