@@ -86,7 +86,10 @@ class EucaISConnection(object):
         return { 'task_id': root.importTaskId.text if hasattr(root, 'importTaskId') else None,
                  'manifest_url': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
                  'volume_id': root.volumeId.text if hasattr(root, 'volumeId') else None }
-
+    """
+    Communicates conversion status to the server
+    Returns True if task should be canceled
+    """
     def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None):
         if task_id==None or status==None:
             raise RuntimeError("Invalid parameters")
@@ -95,8 +98,11 @@ class EucaISConnection(object):
             params['BytesConverted'] = bytes_converted
         if volume_id != None:
             params['VolumeId'] = volume_id
-        worker.log.debug('Sending %s to PutInstanceImportTaskStatus' % params)
-        self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
+        resp = self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
+        if resp.status != 200:
+            raise httplib.HTTPException(resp.status, resp.reason, resp.read())
+        root = objectify.XML(resp.read())
+        return 'true' == root.cancelled.text if hasattr(root, 'cancelled') else False
 
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
