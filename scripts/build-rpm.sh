@@ -33,7 +33,7 @@ function insert_global()
 
 mkdir -p build/{BUILD,BUILDROOT,SRPMS,RPMS,SOURCES,SPECS}
 
-TARBALL_NAME=imaging-worker-$BUILD_VERSION
+TARBALL_NAME=eucalyptus-imaging-worker-$BUILD_VERSION
 
 cp *.spec build/SPECS
 git archive --format=tar --prefix=$TARBALL_NAME/ HEAD | gzip > build/SOURCES/$TARBALL_NAME.tar.gz
@@ -45,7 +45,7 @@ insert_global $SPECFILE build_id $BUILD_ID
 insert_global $SPECFILE build_version $BUILD_VERSION
 
 rpmbuild --define "_topdir `pwd`/build" \
-    --nodeps -bs build/SPECS/imaging-servo.spec || exit 1
+    --nodeps -bs build/SPECS/eucalyptus-imaging-worker.spec || exit 1
 
 [ ! -d ./rpmfab ] && git clone git://github.com/gholms/rpmfab.git
 
