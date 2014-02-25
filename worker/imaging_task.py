@@ -104,10 +104,10 @@ class ImagingTask(object):
         manifest = manifest_url.replace('imaging@', '')
         worker.log.debug('Calling python %s -m %s -d %s' % (path_to_download_image, manifest, device_name))
         try:
-            return subprocess.call(['python', path_to_download_image, '-m', manifest, '-d', device_name])
+            return subprocess.Popen(['python', path_to_download_image, '-m', manifest, '-d', device_name, '--debug'], stdout=subprocess.PIPE)
         except Exception, err:
             worker.log.error('Could not download data from object storage: %s' % err)
-            return 1
+            return None
 
     def detach_volume(self, timeout_sec=300):
         if self.volume_id == None:
@@ -155,7 +155,17 @@ class ImagingTask(object):
                     self.detach_volume()
                     return False
                 # download image to the block device
-                if self.download_data(self.manifest_url, device_to_use) == 0:
+                process = self.download_data(self.manifest_url, device_to_use)
+                if process != None:
+                    while p.poll() == None:
+                        output=p.stdout.readline().strip()
+                        worker.log.info("Status " + output)
+                        if is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, 0):
+                            worker.log.info('Conversion task %s was canceled by server' % self.task_id)
+                            p.kill()
+                        else:
+                            time.sleep(10)
+                else
                     done_with_errors = False
             else:
                 worker.log.info('There is no volume id. Importing to Object Storage')
