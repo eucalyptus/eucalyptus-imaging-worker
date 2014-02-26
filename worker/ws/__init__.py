@@ -66,6 +66,9 @@ class EucaEC2Connection(object):
     def detach_volume(self, volume_id):
         return self.conn.detach_volume(volume_id)
 
+    def describe_volumes(self, volume_ids=None):
+        return self.conn.get_all_volumes(volume_ids)
+
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Imaging',
