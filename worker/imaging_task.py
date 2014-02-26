@@ -17,6 +17,7 @@
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
 import time
+import re
 import os
 import string
 import config
@@ -104,9 +105,9 @@ class ImagingTask(object):
         manifest = manifest_url.replace('imaging@', '')
         worker.log.debug('Calling python %s -m %s -d %s' % (path_to_download_image, manifest, device_name))
         try:
-            return subprocess.Popen(['python', path_to_download_image, '-m', manifest, '-d', device_name, '--debug'], stdout=subprocess.PIPE)
+            return subprocess.Popen(['python', path_to_download_image, '-m', manifest, '-d', device_name, '--reportprogress'], stderr=subprocess.PIPE)
         except Exception, err:
-            worker.log.error('Could not download data from object storage: %s' % err)
+            worker.log.error('Could not start data download: %s' % err)
             return None
 
     def detach_volume(self, timeout_sec=300):
@@ -157,15 +158,19 @@ class ImagingTask(object):
                 # download image to the block device
                 process = self.download_data(self.manifest_url, device_to_use)
                 if process != None:
-                    while p.poll() == None:
-                        output=p.stdout.readline().strip()
-                        worker.log.info("Status " + output)
-                        if is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, 0):
+                    while process.poll() == None:
+                        # get bytes transfered
+                        output=process.stderr.readline().strip()
+                        m = re.search('^Downloaded\:(\d+)', output)
+                        bytes_transfered = 0
+                        if m != None:
+                            bytes_transfered = int(m.group(1))
+                        worker.log.info("Status %s, %d" % (output, bytes_transfered))
+                        if is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, bytes_transfered):
                             worker.log.info('Conversion task %s was canceled by server' % self.task_id)
-                            p.kill()
+                            process.kill()
                         else:
                             time.sleep(10)
-                else
                     done_with_errors = False
             else:
                 worker.log.info('There is no volume id. Importing to Object Storage')

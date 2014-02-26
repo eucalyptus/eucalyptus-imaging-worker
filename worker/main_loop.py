@@ -20,6 +20,7 @@ import time
 import config
 import worker
 from worker.ws import EucaISConnection
+from worker.imaging_task import ImagingTask
 
 class WorkerLoop(object):
     STOPPED = "stopped"
