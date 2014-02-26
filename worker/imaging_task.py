@@ -12,7 +12,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see http://www.gnu.org/licenses/.
 #
-
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
@@ -37,6 +36,19 @@ class ImagingTask(object):
         self.task_id = task_id
         self.manifest_url = manifest_url
         self.volume_id = volume_id
+        self.ec2_conn = EucaEC2Connection(host_name=config.get_clc_host(),
+                          aws_access_key_id=config.get_access_key_id(),
+                          aws_secret_access_key=config.get_secret_access_key(),
+                          security_token = config.get_security_token(),
+                          port=config.get_clc_port(),
+                          path=config.get_ec2_path())
+        self.is_conn = EucaISConnection(host_name=config.get_clc_host(),
+                          aws_access_key_id=config.get_access_key_id(),
+                          aws_secret_access_key=config.get_secret_access_key(),
+                          security_token = config.get_security_token(),
+                          port=config.get_clc_port(),
+                          path=config.get_imaging_path())
+
 
     def __str__(self):
         return 'Task: {0}, manifest url: {1}, volume id: {2}'.format(self.task_id, self.manifest_url,
@@ -77,14 +89,8 @@ class ImagingTask(object):
         devices_before = self.get_block_devices()
         device_name = self.next_device_name(devices_before)
         instance_id = config.get_worker_id()
-
-        ec2 = EucaEC2Connection(host_name=config.get_clc_host(),
-                          aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(),
-                          port=config.get_clc_port(), 
-                          path=config.get_ec2_path())
         worker.log.debug('attaching volume {0} to {1} as {2}'.format(self.volume_id, instance_id, device_name))
-        if not ec2.attach_volume(self.volume_id, instance_id, device_name):
+        if not self.ec2_conn.attach_volume(self.volume_id, instance_id, device_name):
             raise RuntimeError('Can not attach volume {0} to the instance {1}'.format(
                               self.volume_id, instance_id)) #todo: add specific error?
         # wait till we have a new device
@@ -114,14 +120,9 @@ class ImagingTask(object):
         if self.volume_id == None:
             raise RuntimeError('This import does not have volume id')
         timeout_time = time.time() + timeout_sec
-        ec2 = EucaEC2Connection(host_name=config.get_clc_host(),
-                          aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(),
-                          port=config.get_clc_port(), 
-                          path=config.get_ec2_path())
         worker.log.debug('detaching volume {0}'.format(self.volume_id))
         devices_before = self.get_block_devices()
-        if not ec2.detach_volume(self.volume_id):
+        if not self.ec2_conn.detach_volume(self.volume_id):
             raise RuntimeError('Can not dettach volume {0}'.format(self.volume_id)) #todo: add specific error?
 
         # wait till we have less devices
@@ -133,12 +134,25 @@ class ImagingTask(object):
             raise RuntimeError('Volume was not dettached in {0} seconds'.format(timeout_sec)) #todo: add specific error?
         return True
 
+    def run_download_to_volume(self, device_to_use):
+        # download image to the block device and monitor process
+        process = self.download_data(self.manifest_url, device_to_use)
+        if process != None:
+            while process.poll() == None:
+                # get bytes transfered
+                output=process.stderr.readline().strip()
+                m = re.search('^Downloaded\:(\d+)', output)
+                bytes_transfered = 0
+                if m != None:
+                    bytes_transfered = int(m.group(1))
+                worker.log.debug("Status %s, %d" % (output, bytes_transfered))
+                if self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, bytes_transfered):
+                    worker.log.info('Conversion task %s was canceled by server' % self.task_id)
+                    process.kill()
+                else:
+                    time.sleep(10)
+
     def process_task(self):
-        is_conn = EucaISConnection(host_name=config.get_clc_host(),
-                          aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(),
-                          port=config.get_clc_port(),
-                          path=config.get_imaging_path())
         try:
             done_with_errors = True
             device_to_use = None
@@ -152,39 +166,27 @@ class ImagingTask(object):
                 worker.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
                     worker.log.error('Device is too small for the image/volume')
-                    is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id, 0)
+                    self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id, 0)
                     self.detach_volume()
                     return False
-                # download image to the block device
-                process = self.download_data(self.manifest_url, device_to_use)
-                if process != None:
-                    while process.poll() == None:
-                        # get bytes transfered
-                        output=process.stderr.readline().strip()
-                        m = re.search('^Downloaded\:(\d+)', output)
-                        bytes_transfered = 0
-                        if m != None:
-                            bytes_transfered = int(m.group(1))
-                        worker.log.info("Status %s, %d" % (output, bytes_transfered))
-                        if is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, bytes_transfered):
-                            worker.log.info('Conversion task %s was canceled by server' % self.task_id)
-                            process.kill()
-                        else:
-                            time.sleep(10)
+                try:
+                    self.run_download_to_volume(device_to_use)
                     done_with_errors = False
+                except Exception, err:
+                     worker.log.error('Failed to download data: %s' % err)
             else:
                 worker.log.info('There is no volume id. Importing to Object Storage')
                 raise RuntimeError('Import to Object Storage is not supported')
             # detaching volume
             if device_to_use != None:
-                 worker.log.info('Detaching volume %s' % self.volume_id)
-                 self.detach_volume()
-            # set done or error state
+                worker.log.info('Detaching volume %s' % self.volume_id)
+                self.detach_volume()
+            # set DONE or FAILED state
             if done_with_errors:
-                is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
+                self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
                 return False
             else:
-                is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id, image_size)
+                self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id, image_size)
                 return True
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err)
