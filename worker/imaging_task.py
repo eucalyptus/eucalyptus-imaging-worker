@@ -82,26 +82,17 @@ class ImagingTask(object):
         lc = device[len(device)-1:]
         return device[0:len(device)-1] + chr(ord(lc)+1)
 
-    def attach_volume(self, timeout_sec=300):
+    def attach_volume(self):
         if self.volume_id == None:
             raise RuntimeError('This import does not have a volume')
-        timeout_time = time.time() + timeout_sec
         devices_before = self.get_block_devices()
         device_name = self.next_device_name(devices_before)
         instance_id = config.get_worker_id()
         worker.log.debug('attaching volume {0} to {1} as {2}'.format(self.volume_id, instance_id, device_name))
-        if not self.ec2_conn.attach_volume(self.volume_id, instance_id, device_name):
+        if not self.ec2_conn.attach_volume_and_wait(self.volume_id, instance_id, device_name):
             raise RuntimeError('Can not attach volume {0} to the instance {1}'.format(
                               self.volume_id, instance_id)) #todo: add specific error?
-        # wait till we have a new device
-        while time.time() < timeout_time and len(devices_before)==len(self.get_block_devices()):
-            worker.log.debug('waiting volume attachment')
-            time.sleep(10)
-
         new_block_devices = self.get_block_devices()
-        if len(devices_before)==len(new_block_devices):
-            raise RuntimeError('Volume was not attached in {0} seconds'.format(timeout_sec)) #todo: add specific error?
-
         new_device_name = new_block_devices[0] # can it be different from device_name?
         return new_device_name
 
@@ -116,20 +107,13 @@ class ImagingTask(object):
             worker.log.error('Could not start data download: %s' % err)
             return None
 
-    def detach_volume(self, timeout_sec=300):
+    def detach_volume(self):
         if self.volume_id == None:
             raise RuntimeError('This import does not have volume id')
-        timeout_time = time.time() + timeout_sec
         worker.log.debug('detaching volume {0}'.format(self.volume_id))
         devices_before = self.get_block_devices()
-        if not self.ec2_conn.detach_volume(self.volume_id):
+        if not self.ec2_conn.detach_volume_and_wait(self.volume_id):
             raise RuntimeError('Can not dettach volume {0}'.format(self.volume_id)) #todo: add specific error?
-
-        # wait till we have less devices
-        while time.time() < timeout_time and len(devices_before)==len(self.get_block_devices()):
-            worker.log.debug('waiting volume detachment')
-            time.sleep(10)
-
         if len(devices_before)==len(self.get_block_devices()):
             raise RuntimeError('Volume was not dettached in {0} seconds'.format(timeout_sec)) #todo: add specific error?
         return True

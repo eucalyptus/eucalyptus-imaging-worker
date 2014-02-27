@@ -69,6 +69,40 @@ class EucaEC2Connection(object):
     def describe_volumes(self, volume_ids=None):
         return self.conn.get_all_volumes(volume_ids)
 
+    def describe_volume(self, volume_id=None):
+        if volume_id == None:
+           raise RuntimeError("There is no volume_id provoded")
+        res = self.describe_volumes([volume_id, 'verbose'])
+        if len(res) != 1:
+           raise RuntimeError("Can't describe volume %s" % volume_id)
+        else:
+           if res.status == 'in-use':
+               return {'status': vol.attach_data.status, 'instance_id': vol.attach_data.instance_id }
+           else:
+               return {'status': res.status}
+
+    def detach_volume_and_wait(self, volume_id, timeout_sec=3000):
+        if not self.conn.detach_volume(volume_id):
+            raise Exception("Can't detach volume")
+        timeout_time = time.time() + timeout_sec
+        vol = self.describe_volume(volume_id)
+        while vol['status'] != 'available' and time.time() < timeout_time:
+            vol = self.describe_volume(volume_id)
+            time.sleep(5)
+        vol = self.describe_volume(volume_id)
+        return vol['status'] == 'available'
+
+    def attach_volume_and_wait(self, volume_id, instance_id, device_name, timeout_sec=3000):
+        if not self.conn.attach_volume(volume_id, instance_id, device_name):
+            raise Exception("Can't attach volume")
+        timeout_time = time.time() + timeout_sec
+        vol = self.describe_volume(volume_id)
+        while vol['status'] != 'attached' and time.time() < timeout_time:
+            vol = self.describe_volume(volume_id)
+            time.sleep(5)
+        vol = self.describe_volume(volume_id)
+        return vol['status'] == 'attached' and vol['instance_id'] == instance_id
+
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Imaging',
