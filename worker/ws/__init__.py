@@ -76,10 +76,11 @@ class EucaEC2Connection(object):
         if len(res) != 1:
            raise RuntimeError("Can't describe volume %s" % volume_id)
         else:
-           if res.status == 'in-use':
+           vol = res[0]
+           if vol.status == 'in-use':
                return {'status': vol.attach_data.status, 'instance_id': vol.attach_data.instance_id }
            else:
-               return {'status': res.status}
+               return {'status': vol.status}
 
     def detach_volume_and_wait(self, volume_id, timeout_sec=3000):
         if not self.conn.detach_volume(volume_id):
