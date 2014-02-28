@@ -97,12 +97,9 @@ class ImagingTask(object):
         return new_device_name
 
     def download_data(self, manifest_url, device_name):
-        #todo: get location from config
-        path_to_download_image = '/tmp/eucatoolkit/stages/downloadimage.py'
         manifest = manifest_url.replace('imaging@', '')
-        worker.log.debug('Calling python %s -m %s -d %s' % (path_to_download_image, manifest, device_name))
         try:
-            return subprocess.Popen(['python', path_to_download_image, '-m', manifest, '-d', device_name, '--reportprogress'], stderr=subprocess.PIPE)
+            return subprocess.Popen(['/usr/libexec/eucalyptus/euca-run-workflow', 'down-parts/write-raw', '--url-image', manifest, '--output-path', device_name], stderr=subprocess.PIPE)
         except Exception, err:
             worker.log.error('Could not start data download: %s' % err)
             return None

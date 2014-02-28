@@ -18,6 +18,8 @@
 # additional information or have any questions.
 import time
 import config
+import os
+import subprocess
 import worker
 from worker.ws import EucaISConnection
 from worker.imaging_task import ImagingTask
@@ -38,7 +40,13 @@ class WorkerLoop(object):
         worker.log.debug('main loop running with clc_host=%s, instance_id=%s' % (self.__euca_host, self.__instance_id))
 
     def start(self):
-        self.__status = WorkerLoop.RUNNING 
+        # check if workflow enabled
+        if subprocess.call(['/usr/libexec/eucalyptus/euca-run-workflow', '-h'], stdout=os.devnull, stderr=os.devnull) != 0:
+            worker.log.error('Failed to find euca-run-workflow. Would not start service')
+            self.__status = WorkerLoop.STOPPED
+        else:
+            self.__status = WorkerLoop.RUNNING
+
         while self.__status == WorkerLoop.RUNNING:
             worker.log.info('Querying for new imaging task')
             try:
