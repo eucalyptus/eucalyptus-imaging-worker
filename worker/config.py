@@ -17,7 +17,6 @@
 # additional information or have any questions.
 import os
 import httplib2
-import worker
 import boto
 import boto.provider
 
@@ -100,16 +99,20 @@ def get_clc_host():
 
 def get_clc_port():
     val=get_value('eucalyptus_port')
-    if val is not None:
-        return int(val)
-    else:
-        return val
+    return int(val) if val is not None else None
 
 def get_ec2_path():
     return get_value('ec2_path')
 
 def get_imaging_path():
     return get_value('imaging_path')
+
+def get_log_server():
+    return get_value('log_server')
+
+def get_log_server_port():
+    val=get_value('log_server_port')
+    return int(val) if val is not None else None
 
 __availability_zone = None
 def get_availability_zone():
