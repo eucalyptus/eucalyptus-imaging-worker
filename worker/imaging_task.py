@@ -16,7 +16,7 @@
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
 import time
-import re
+import json
 import os
 import string
 import config
@@ -122,10 +122,12 @@ class ImagingTask(object):
             while process.poll() == None:
                 # get bytes transfered
                 output=process.stderr.readline().strip()
-                m = re.search('^Downloaded\:(\d+)', output)
                 bytes_transfered = 0
-                if m != None:
-                    bytes_transfered = int(m.group(1))
+                try:
+                    res = json.loads(output)
+                    bytes_transfered = res['status']['bytes_downloaded']
+                except Exception
+                    worker.log.warn("Downloadimage subprocess reports invalid status")
                 worker.log.debug("Status %s, %d" % (output, bytes_transfered))
                 if self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, bytes_transfered):
                     worker.log.info('Conversion task %s was canceled by server' % self.task_id)
