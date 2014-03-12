@@ -22,6 +22,7 @@ import boto.provider
 
 DEFAULT_PID_ROOT = "/var/run/eucalyptus-imaging-worker"
 DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_ROOT, "eucalyptus-imaging-worker.pid")
+DEFAULT_CERT_FILE = os.path.join(DEFAULT_PID_ROOT, "cloud_certificate")
 CONF_ROOT = "/etc/eucalyptus-imaging-worker"
 RUN_ROOT = "/var/lib/eucalyptus-imaging-worker"
 SUDO_BIN = "/usr/bin/sudo"
@@ -113,6 +114,19 @@ def get_log_server():
 def get_log_server_port():
     val=get_value('log_server_port', optional=True)
     return int(val) if val is not None else None
+
+__cloud_certificate_file = None
+def get_cloud_certificate_file():
+    global __cloud_certificate_file
+    if __cloud_certificate_file is None:
+        val = get_value('cloud_certificate', optional=True)
+        if val == None:
+            raise Exception('could not get cloud certificate')
+        f = open(DEFAULT_CERT_FILE, 'w')
+        f.write(val)
+        f.close()
+        __cloud_certificate_file = DEFAULT_CERT_FILE
+    return __cloud_certificate_file
 
 __availability_zone = None
 def get_availability_zone():

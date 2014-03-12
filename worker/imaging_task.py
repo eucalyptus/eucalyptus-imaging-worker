@@ -126,7 +126,7 @@ class ImagingTask(object):
                 try:
                     res = json.loads(output)
                     bytes_transfered = res['status']['bytes_downloaded']
-                except Exception
+                except Exception:
                     worker.log.warn("Downloadimage subprocess reports invalid status")
                 worker.log.debug("Status %s, %d" % (output, bytes_transfered))
                 if self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, bytes_transfered):
