@@ -45,17 +45,17 @@ class ImagingTask(object):
         raise Exception("Not implemented")
 
     """
-    param: instance_import_task (object representing ImagingService's message) 
-    return: ImagingTask 
+    param: instance_import_task (object representing ImagingService's message)
+    return: ImagingTask
     """
     @staticmethod
     def from_import_task(import_task):
         if not import_task:
             return None
-        task = None  
+        task = None
         if import_task.task_type == "import_volume" and import_task.volume_task:
             volume_id = import_task.volume_task.volume_id
-            manifests = import_task.volume_task.image_manifests 
+            manifests = import_task.volume_task.image_manifests
             manifest_url = None
             if manifests and len(manifests) > 0:
                 manifest_url = manifests[0].manifest_url
@@ -76,7 +76,7 @@ class InstanceStoreImagingTask(ImagingTask):
         self.prefix = prefix
 
         # list of image manifests that will be the sources of conversion
-        # [{'manifest_url':'http://..../vmlinuz.manifest.xml', 'format':'KERNEL'}, 
+        # [{'manifest_url':'http://..../vmlinuz.manifest.xml', 'format':'KERNEL'},
         #  {'manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
         #  {'manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
         self.image_manifests = image_manifests

@@ -80,6 +80,3 @@ class WorkerLoop(object):
 
     def status(self):
         return self.__status
-
-
-    

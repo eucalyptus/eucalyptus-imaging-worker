@@ -9,8 +9,8 @@ class InstanceImportTask(object):
 
     def __repr__(self):
         return 'InstanceImportTask:%s' % self.task_id
- 
-    def startElement(self, name, attrs, connection): 
+
+    def startElement(self, name, attrs, connection):
         if name == 'instanceStoreTask':
             self.instance_store_task = InstanceStoreTask()
             return self.instance_store_task
