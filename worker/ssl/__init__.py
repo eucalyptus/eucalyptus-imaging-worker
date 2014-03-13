@@ -15,4 +15,23 @@
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
-pass
+
+import worker.ws
+import worker.config as config
+import os
+global __cloud_certificate_file
+def get_cloud_certificate_file():
+    __cloud_certificate_file = None
+    if __cloud_certificate_file is None:
+        con = worker.ws.connect_euare(host_name=config.get_clc_host(), aws_secret_access_key=config.get_secret_access_key(), 
+                                      security_token=config.get_security_token())
+        val = con.download_cloud_certificate()
+        if val == None:
+            raise Exception('could not get cloud certificate')
+        f = open(config.CLOUD_CERT_FILE, 'w')
+        f.write(val)
+        f.close()
+        os.chmod(config.CLOUD_CERT_FILE, 0400)
+        __cloud_certificate_file = config.CLOUD_CERT_FILE
+    return __cloud_certificate_file
+
