@@ -34,6 +34,8 @@ class ImagingTask(object):
     def __init__(self, task_id, task_type):
         self.task_id = task_id
         self.task_type = task_type 
+        self.is_conn = worker.ws.connect_imaging_worker(host_name=config.get_clc_host(), aws_access_key_id=config.get_access_key_id(), 
+                                             aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
 
     def get_task_id(self):
         return self.task_id
@@ -43,6 +45,15 @@ class ImagingTask(object):
 
     def process_task(self):
         raise Exception("Not implemented")
+
+    def report_running(self, volume_id=None, bytes_transferred=None):
+        return self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, volume_id, bytes_transferred)
+    
+    def report_done(self, volume_id=None, bytes_transferred=None):
+        self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, volume_id, bytes_transferred)
+
+    def report_failed(self, volume_id=None, bytes_transferred=None):
+        self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, volume_id, bytes_transferred)
 
     """
     param: instance_import_task (object representing ImagingService's message) 
@@ -59,7 +70,7 @@ class ImagingTask(object):
             manifest_url = None
             if manifests and len(manifests) > 0:
                 manifest_url = manifests[0].manifest_url
-            task = VolumeImagingTask(import_task.task_id, import_task.task_type,manifest_url, volume_id)
+            task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id)
         elif import_task.task_type == "convert_image" and import_task.instance_store_task:
             bucket = import_task.instance_store_task.bucket
             prefix = import_task.instance_store_task.prefix
@@ -80,6 +91,8 @@ class InstanceStoreImagingTask(ImagingTask):
         #  {'manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
         #  {'manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
         self.image_manifests = image_manifests
+    def __repr__(self):
+        return 'instance-store conversion task:%s' % self.task_id
 
     def __str__(self):
         manifest_str = ''
@@ -93,7 +106,6 @@ class InstanceStoreImagingTask(ImagingTask):
 class VolumeImagingTask(ImagingTask):
     def __init__(self, task_id, manifest_url=None, volume_id=None):
         ImagingTask.__init__(self, task_id, "import_volume")
-
         self.manifest_url = manifest_url
         self.volume_id = volume_id
         self.ec2_conn = EucaEC2Connection(host_name=config.get_clc_host(),
@@ -102,13 +114,9 @@ class VolumeImagingTask(ImagingTask):
                           security_token = config.get_security_token(),
                           port=config.get_clc_port(),
                           path=config.get_ec2_path())
-        self.is_conn = EucaISConnection(host_name=config.get_clc_host(),
-                          aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(),
-                          security_token = config.get_security_token(),
-                          port=config.get_clc_port(),
-                          path=config.get_imaging_path())
 
+    def __repr__(self):
+        return 'volume conversion task:%s' % self.task_id
 
     def __str__(self):
         return 'Task: {0}, manifest url: {1}, volume id: {2}'.format(self.task_id, self.manifest_url,
@@ -189,7 +197,7 @@ class VolumeImagingTask(ImagingTask):
                 except Exception:
                     worker.log.warn("Downloadimage subprocess reports invalid status")
                 worker.log.debug("Status %s, %d" % (output, bytes_transfered))
-                if self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, bytes_transfered):
+                if self.report_running(self.volume_id, bytes_transfered): 
                     worker.log.info('Conversion task %s was canceled by server' % self.task_id)
                     process.kill()
                 else:
@@ -209,7 +217,7 @@ class VolumeImagingTask(ImagingTask):
                 worker.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
                     worker.log.error('Device is too small for the image/volume')
-                    self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id, 0)
+                    self.report_failed(self.volume_id, 0)
                     self.detach_volume()
                     return False
                 try:
@@ -226,10 +234,10 @@ class VolumeImagingTask(ImagingTask):
                 self.detach_volume()
             # set DONE or FAILED state
             if done_with_errors:
-                self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id)
+                self.report_failed(self.volume_id)
                 return False
             else:
-                self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id, image_size)
+                self.report_done(self.volume_id, image_size)
                 return True
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err)

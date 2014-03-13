@@ -52,8 +52,8 @@ class WorkerLoop(object):
         while self.__status == WorkerLoop.RUNNING:
             worker.log.info('Querying for new imaging task')
             try:
-                con = EucaISConnection(host_name=worker.config.get_clc_host(), aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
+                con = worker.ws.connect_imaging_worker(host_name=self.__euca_host, aws_access_key_id=config.get_access_key_id(), 
+                                             aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
                 import_task = con.get_import_task()
                 task = ImagingTask.from_import_task(import_task)
                 if task:
