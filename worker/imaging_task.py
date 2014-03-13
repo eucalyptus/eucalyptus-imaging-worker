@@ -31,9 +31,69 @@ class ImagingTask(object):
     FAILED_STATE  = 'FAILED'
     DONE_STATE  = 'DONE'
     EXTANT_STATE = 'EXTANT'
-
-    def __init__(self, task_id, manifest_url=None, volume_id=None):
+    def __init__(self, task_id, task_type):
         self.task_id = task_id
+        self.task_type = task_type 
+
+    def get_task_id(self):
+        return self.task_id
+
+    def get_task_type(self):
+        return self.task_type
+
+    def process_task(self):
+        raise Exception("Not implemented")
+
+    """
+    param: instance_import_task (object representing ImagingService's message) 
+    return: ImagingTask 
+    """
+    @staticmethod
+    def from_import_task(import_task):
+        if not import_task:
+            return None
+        task = None  
+        if import_task.task_type == "import_volume" and import_task.volume_task:
+            volume_id = import_task.volume_task.volume_id
+            manifests = import_task.volume_task.image_manifests 
+            manifest_url = None
+            if manifests and len(manifests) > 0:
+                manifest_url = manifests[0].manifest_url
+            task = VolumeImagingTask(import_task.task_id, import_task.task_type,manifest_url, volume_id)
+        elif import_task.task_type == "convert_image" and import_task.instance_store_task:
+            bucket = import_task.instance_store_task.bucket
+            prefix = import_task.instance_store_task.prefix
+            manifests = import_task.instance_store_task.image_manifests
+            task = InstanceStoreImagingTask(import_task.task_id, bucket, prefix, manifests)
+        return task
+
+class InstanceStoreImagingTask(ImagingTask):
+    def __init__(self, task_id, bucket=None, prefix=None, image_manifests=None):
+        ImagingTask.__init__(self, task_id, "convert_image")
+        # name of the bucket that converted image will be stored
+        self.bucket = bucket
+        # prefix of the image file (e.g., {prefix}.manifest.xml)
+        self.prefix = prefix
+
+        # list of image manifests that will be the sources of conversion
+        # [{'manifest_url':'http://..../vmlinuz.manifest.xml', 'format':'KERNEL'}, 
+        #  {'manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
+        #  {'manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
+        self.image_manifests = image_manifests
+
+    def __str__(self):
+        manifest_str = ''
+        for manifest in self.image_manifests:
+            manifest_str = manifest_str + '\n' + str(manifest)
+        return 'instance-store conversion task - id: %s, bucket: %s, prefix: %s, manifests: %s' % (self.task_id, self.bucket, self.prefix, manifest_str)
+
+    def process_task(self):
+        return True
+
+class VolumeImagingTask(ImagingTask):
+    def __init__(self, task_id, manifest_url=None, volume_id=None):
+        ImagingTask.__init__(self, task_id, "import_volume")
+
         self.manifest_url = manifest_url
         self.volume_id = volume_id
         self.ec2_conn = EucaEC2Connection(host_name=config.get_clc_host(),

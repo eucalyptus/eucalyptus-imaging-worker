@@ -24,6 +24,7 @@ from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
 from boto.iam.connection import IAMConnection
 from worker.ssl.server_cert import ServerCertificate
+from worker.ws.instance_import_task import InstanceImportTask
 import time
 import M2Crypto
 from collections import Iterable
@@ -51,7 +52,7 @@ def connect_ec2(host_name=None, port=80, path="services/Eucalyptus", aws_access_
 class EucaEC2Connection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Eucalyptus',
-                 security_token=None, validate_certs=False, port=8773):
+                 security_token=None, validate_certs=False, port=80):
         region=RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id, 
                                 aws_secret_access_key=aws_secret_access_key, port=port, 
@@ -107,7 +108,7 @@ class EucaEC2Connection(object):
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Imaging',
-                 security_token=None, validate_certs=False, port=8773):
+                 security_token=None, validate_certs=False, port=80):
         region=RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
                                 aws_secret_access_key=aws_secret_access_key, port=port, 
@@ -117,13 +118,11 @@ class EucaISConnection(object):
         self.conn.http_connection_kwargs['timeout'] = 30
 
     def get_import_task(self):
-        resp=self.conn.make_request('GetInstanceImportTask', {}, path='/', verb='POST')
-        if resp.status != 200:
-           raise httplib.HTTPException(resp.status, resp.reason, resp.read())
-        root = objectify.XML(resp.read())
-        return { 'task_id': root.importTaskId.text if hasattr(root, 'importTaskId') else None,
-                 'manifest_url': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
-                 'volume_id': root.volumeId.text if hasattr(root, 'volumeId') else None }
+        task = self.conn.get_object('GetInstanceImportTask', {}, InstanceImportTask, verb='POST')
+        if not task or not task.task_id :
+            return None
+        else:
+            return task
     """
     Communicates conversion status to the server
     Returns True if task should be canceled
