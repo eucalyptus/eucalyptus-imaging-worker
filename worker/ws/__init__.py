@@ -157,6 +157,16 @@ class EucaEuareConnection(IAMConnection):
                             path, security_token,
                             validate_certs=validate_certs)
 
+    def download_cloud_certificate(self):
+        resp = self.get_response('DownloadCloudCertificate', {})
+        result = resp['euca:_download_cloud_certificate_response_type']['euca:download_cloud_certificate_result'] 
+        if not result:
+            raise Exception('No certificate is found in the response')
+        cert_b64= result['euca:cloud_certificate']
+        if not cert_b64:
+            raise Exception('No certificate is found in the response')
+        return cert_b64.decode('base64')
+
     def download_server_certificate(self, cert, pk, euare_cert, auth_signature, cert_arn):
         """
         Download server certificate identified with 'cert_arn'. del_certificate and auth_signature

@@ -1,5 +1,10 @@
 from boto.resultset import ResultSet
 
+def match_name(name, param):
+    if name==param or 'euca:%s'%name == param:
+        return True
+    return False
+
 class InstanceImportTask(object):
     def __init__(self, parent=None):
         self.task_id = None
@@ -9,21 +14,21 @@ class InstanceImportTask(object):
 
     def __repr__(self):
         return 'InstanceImportTask:%s' % self.task_id
-
-    def startElement(self, name, attrs, connection):
-        if name == 'instanceStoreTask':
+ 
+    def startElement(self, name, attrs, connection): 
+        if match_name('instanceStoreTask', name):
             self.instance_store_task = InstanceStoreTask()
             return self.instance_store_task
-        elif name == 'volumeTask':
+        elif match_name('volumeTask', name):
             self.volume_task = VolumeTask()
             return self.volume_task
         else:
             return None
         
     def endElement(self, name, value, connection):
-        if name == 'importTaskId':
+        if match_name('importTaskId', name):
             self.task_id = value
-        elif name == 'importTaskType':
+        elif match_name('importTaskType',name):
             self.task_type = value
         else:
             setattr(self, name, value)
@@ -35,16 +40,16 @@ class InstanceStoreTask(object):
         self.image_manifests = []
 
     def startElement(self, name, attrs, connection): 
-        if name == 'imageManifestSet':
+        if match_name('imageManifestSet',name):
             self.image_manifests =  ResultSet([('item', ImageManifest)])
             return self.image_manifests
         else:
             return None
 
     def endElement(self, name, value, connection):
-        if name == 'bucket':
+        if match_name('bucket',name):
             self.bucket = value
-        elif name == 'prefix':
+        elif match_name('prefix',name):
             self.prefix = value
         else:
             setattr(self, name, value)
@@ -55,14 +60,14 @@ class VolumeTask(object):
         self.image_manifests = []
 
     def startElement(self, name, attrs, connection): 
-        if name == 'imageManifestSet':
+        if match_name('imageManifestSet', name):
             self.image_manifests =  ResultSet([('item', ImageManifest)])
             return self.image_manifests
         else:
             return None
 
     def endElement(self, name, value, connection):
-        if name == 'volumeId':
+        if match_name('volumeId', name):
             self.volume_id = value
         else:
             setattr(self, name, value)
@@ -76,9 +81,9 @@ class ImageManifest(object):
         pass
 
     def endElement(self, name, value, connection):
-        if name == 'manifestUrl':
+        if match_name('manifestUrl', name):
             self.manifest_url = value
-        elif name == 'format':
+        elif match_name('format', name):
             self.format = value
         else:
             setattr(self, name, value)
