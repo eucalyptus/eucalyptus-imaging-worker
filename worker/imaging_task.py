@@ -26,6 +26,7 @@ import httplib2
 from lxml import objectify
 from worker.ws import EucaEC2Connection
 from worker.ws import EucaISConnection
+import worker.ssl
 
 class ImagingTask(object):
     FAILED_STATE  = 'FAILED'
@@ -44,15 +45,33 @@ class ImagingTask(object):
         return self.task_type
 
     def process_task(self):
-        raise Exception("Not implemented")
+        if self.run_task():
+            self.report_done()
+            return True
+        else:
+            self.report_failed()
+            return False
+            
 
     def report_running(self, volume_id=None, bytes_transferred=None):
         return self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, volume_id, bytes_transferred)
     
-    def report_done(self, volume_id=None, bytes_transferred=None):
+    def report_done(self):
+        volume_id = None
+        if hasattr(self, 'volume_id'):
+            volume_id = self.volume_id
+        bytes_transferred = None
+        if hasattr(self, 'bytes_transferred'):
+            bytes_transferred = self.bytes_transferred
         self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, volume_id, bytes_transferred)
 
     def report_failed(self, volume_id=None, bytes_transferred=None):
+        volume_id = None
+        if hasattr(self, 'volume_id'):
+            volume_id = self.volume_id
+        bytes_transferred = None
+        if hasattr(self, 'bytes_transferred'):
+            bytes_transferred = self.bytes_transferred
         self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, volume_id, bytes_transferred)
 
     """
@@ -72,35 +91,56 @@ class ImagingTask(object):
                 manifest_url = manifests[0].manifest_url
             task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id)
         elif import_task.task_type == "convert_image" and import_task.instance_store_task:
-            bucket = import_task.instance_store_task.bucket
-            prefix = import_task.instance_store_task.prefix
-            manifests = import_task.instance_store_task.image_manifests
-            task = InstanceStoreImagingTask(import_task.task_id, bucket, prefix, manifests)
+            task = import_task.instance_store_task
+            account_id = task.account_id
+            access_key = task.access_key
+            upload_policy = task.upload_policy
+            upload_policy_signature = task.upload_policy_signature
+            s3_url = task.s3_url
+            ec2_cert = task.ec2_cert.decode('base64')
+            ec2_cert_path =  '%s/ec2cert.pem' % config.RUN_ROOT
+            worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
+            import_images = task.import_images
+            converted_image = task.converted_image
+            bucket = converted_image.bucket
+            prefix = converted_image.prefix
+            architecture = converted_image.architecture
+            service_key_path = '%s/service.pem' % config.RUN_ROOT
+            cert_arn = str(task.service_cert_arn)
+            worker.ssl.download_server_certificate(cert_arn, service_key_path)
+            task = InstanceStoreImagingTask(import_task.task_id, bucket=bucket, prefix=prefix, architecture=architecture, owner_account_id=account_id, owner_access_key=access_key, s3_upload_policy=upload_policy, s3_upload_policy_signature=upload_policy_signature, s3_url=s3_url, ec2_cert_path=ec2_cert_path, service_key_path=service_key_path, import_images=import_images)
         return task
 
 class InstanceStoreImagingTask(ImagingTask):
-    def __init__(self, task_id, bucket=None, prefix=None, image_manifests=None):
+    def __init__(self, task_id, bucket=None, prefix=None, architecture=None, owner_account_id=None, owner_access_key=None, s3_upload_policy=None, s3_upload_policy_signature=None,  s3_url=None, ec2_cert_path=None, service_key_path=None, import_images=[]):
         ImagingTask.__init__(self, task_id, "convert_image")
-        # name of the bucket that converted image will be stored
         self.bucket = bucket
-        # prefix of the image file (e.g., {prefix}.manifest.xml)
         self.prefix = prefix
+        self.architecture = architecture
+        self.owner_account_id = owner_account_id
+        self.owner_access_key = owner_access_key
+        self.s3_upload_policy = s3_upload_policy
+        self.s3_upload_policy_signature = s3_upload_policy_signature
+        self.s3_url = s3_url
+        self.ec2_cert_path = ec2_cert_path
+        self.service_key_path = service_key_path
 
         # list of image manifests that will be the sources of conversion
-        # [{'manifest_url':'http://..../vmlinuz.manifest.xml', 'format':'KERNEL'},
-        #  {'manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
-        #  {'manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
-        self.image_manifests = image_manifests
+        # see worker/ws/instance_import_task::ImportImage
+        # [{'id':'eki-xxxx', 'download_manifest_url':'http://..../vmlinuz.manifest.xml', 'format':'KERNEL'},
+        #  {'id':'eri-xxxx', 'download_manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
+        #  {'id':'emi-xxxx', 'download_manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
+        self.import_images = import_images
     def __repr__(self):
         return 'instance-store conversion task:%s' % self.task_id
 
     def __str__(self):
         manifest_str = ''
-        for manifest in self.image_manifests:
+        for manifest in self.import_images:
             manifest_str = manifest_str + '\n' + str(manifest)
         return 'instance-store conversion task - id: %s, bucket: %s, prefix: %s, manifests: %s' % (self.task_id, self.bucket, self.prefix, manifest_str)
 
-    def process_task(self):
+    def run_task(self):
         return True
 
 class VolumeImagingTask(ImagingTask):
@@ -108,12 +148,7 @@ class VolumeImagingTask(ImagingTask):
         ImagingTask.__init__(self, task_id, "import_volume")
         self.manifest_url = manifest_url
         self.volume_id = volume_id
-        self.ec2_conn = EucaEC2Connection(host_name=config.get_clc_host(),
-                          aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(),
-                          security_token = config.get_security_token(),
-                          port=config.get_clc_port(),
-                          path=config.get_ec2_path())
+        self.ec2_conn = worker.ws.connect_ec2(host_name=config.get_clc_host(), aws_access_key_id=config.get_access_key_id(), aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
 
     def __repr__(self):
         return 'volume conversion task:%s' % self.task_id
@@ -190,20 +225,20 @@ class VolumeImagingTask(ImagingTask):
             while process.poll() == None:
                 # get bytes transfered
                 output=process.stderr.readline().strip()
-                bytes_transfered = 0
+                bytes_transferred = 0
                 try:
                     res = json.loads(output)
-                    bytes_transfered = res['status']['bytes_downloaded']
+                    bytes_transferred = res['status']['bytes_downloaded']
                 except Exception:
                     worker.log.warn("Downloadimage subprocess reports invalid status")
-                worker.log.debug("Status %s, %d" % (output, bytes_transfered))
-                if self.report_running(self.volume_id, bytes_transfered): 
+                worker.log.debug("Status %s, %d" % (output, bytes_transferred))
+                if self.report_running(self.volume_id, bytes_transferred): 
                     worker.log.info('Conversion task %s was canceled by server' % self.task_id)
                     process.kill()
                 else:
                     time.sleep(10)
 
-    def process_task(self):
+    def run_task(self):
         try:
             done_with_errors = True
             device_to_use = None
@@ -216,28 +251,25 @@ class VolumeImagingTask(ImagingTask):
                 worker.log.debug('Attached device size is %d bytes' % device_size)
                 worker.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
-                    worker.log.error('Device is too small for the image/volume')
-                    self.report_failed(self.volume_id, 0)
-                    self.detach_volume()
-                    return False
+                    self.image_size = 0
+                    raise Exception('Device is too small for the image/volume')
                 try:
                     self.run_download_to_volume(device_to_use)
                     done_with_errors = False
                 except Exception, err:
-                     worker.log.error('Failed to download data: %s' % err)
+                    raise Exception('Failed to download to volume')
             else:
-                worker.log.info('There is no volume id. Importing to Object Storage')
-                raise RuntimeError('Import to Object Storage is not supported')
+                raise Exception('No volume id is found for import-volume task')
+            
+            # set DONE or FAILED state
+            if done_with_errors:
+                return False
+            else:
+                return True
+        except Exception, err:
+            worker.log.error('Failed to process task: %s' % err)
+        finally:
             # detaching volume
             if device_to_use != None:
                 worker.log.info('Detaching volume %s' % self.volume_id)
                 self.detach_volume()
-            # set DONE or FAILED state
-            if done_with_errors:
-                self.report_failed(self.volume_id)
-                return False
-            else:
-                self.report_done(self.volume_id, image_size)
-                return True
-        except Exception, err:
-            worker.log.error('Failed to process task: %s' % err)

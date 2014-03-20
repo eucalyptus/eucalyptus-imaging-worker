@@ -16,22 +16,30 @@
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
 
+import os
+from worker.floppy import FloppyCredential
 import worker.ws
 import worker.config as config
-import os
-global __cloud_certificate_file
-def get_cloud_certificate_file():
-    __cloud_certificate_file = None
-    if __cloud_certificate_file is None:
-        con = worker.ws.connect_euare(host_name=config.get_clc_host(), aws_secret_access_key=config.get_secret_access_key(), 
-                                      security_token=config.get_security_token())
-        val = con.download_cloud_certificate()
-        if val == None:
-            raise Exception('could not get cloud certificate')
-        f = open(config.CLOUD_CERT_FILE, 'w')
-        f.write(val)
-        f.close()
-        os.chmod(config.CLOUD_CERT_FILE, 0400)
-        __cloud_certificate_file = config.CLOUD_CERT_FILE
-    return __cloud_certificate_file
 
+def write_certificate(cert_file, cert_pem):
+    if not os.path.exists(cert_file):
+        f_cert = open(cert_file, 'w')
+        f_cert.write(cert_pem)
+        f_cert.close()
+        os.chmod(cert_file, 0400)
+
+def download_server_certificate(cert_arn, cert_file, pubkey_included=False):
+    if os.path.exists(cert_file):
+        return
+    f = FloppyCredential() 
+    host = config.get_clc_host()
+    access_key_id = config.get_access_key_id()
+    secret_access_key = config.get_secret_access_key()
+    security_token = config.get_security_token()
+    con = worker.ws.connect_euare(host_name=host, aws_access_key_id = access_key_id, aws_secret_access_key=secret_access_key, security_token=security_token)
+    cert= con.download_server_certificate(f.get_instance_pub_key(), f.get_instance_pk(), f.get_iam_pub_key(), f.get_iam_token(), cert_arn)
+    if pubkey_included:
+        cert_pem = '%s\n%s' % (cert.get_certificate(), cert_get_private_key())
+    else:
+        cert_pem = cert.get_private_key()
+    write_certificate(cert_file, cert_pem) 

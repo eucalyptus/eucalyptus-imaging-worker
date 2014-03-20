@@ -24,10 +24,9 @@ DEFAULT_PID_ROOT = "/var/run/eucalyptus-imaging-worker"
 DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_ROOT, "eucalyptus-imaging-worker.pid")
 CONF_ROOT = "/etc/eucalyptus-imaging-worker"
 RUN_ROOT = "/var/lib/eucalyptus-imaging-worker"
-CLOUD_CERT_FILE = os.path.join(RUN_ROOT, "cloud_certificate.pem")
 SUDO_BIN = "/usr/bin/sudo"
 
-FLOPPY_MOUNT_DIR = "/mnt/floppy"
+FLOPPY_MOUNT_DIR = RUN_ROOT+"/floppy"
 
 # Apply default values in case user does not specify
 pidfile = DEFAULT_PIDFILE

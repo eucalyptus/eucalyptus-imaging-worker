@@ -23,9 +23,13 @@
 from worker.logutil import log, set_loglevel
 from worker.config import set_pidfile, set_boto_config
 from worker.main_loop import WorkerLoop 
+import subprocess
 
 __version__ = '1.0.0-dev'
 Version = __version__
 
 def start_worker():
+    cmd_line = 'sudo modprobe floppy > /dev/null'
+    if subprocess.call(cmd_line, shell=True) != 0:
+        log.error('failed to load floppy driver')
     WorkerLoop().start()
