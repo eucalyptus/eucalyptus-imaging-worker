@@ -30,6 +30,7 @@ import M2Crypto
 from collections import Iterable
 from lxml import objectify
 import worker
+import worker.config as config
 
 def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -118,7 +119,8 @@ class EucaISConnection(object):
         self.conn.http_connection_kwargs['timeout'] = 30
 
     def get_import_task(self):
-        task = self.conn.get_object('GetInstanceImportTask', {}, InstanceImportTask, verb='POST')
+        params = {'InstanceId':config.get_worker_id()}
+        task = self.conn.get_object('GetInstanceImportTask', params, InstanceImportTask, verb='POST')
         if not task or not task.task_id :
             return None
         else:
@@ -130,7 +132,7 @@ class EucaISConnection(object):
     def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None):
         if task_id==None or status==None:
             raise RuntimeError("Invalid parameters")
-        params = {'ImportTaskId':task_id, 'Status': status}
+        params = {'InstanceId':config.get_worker_id(), 'ImportTaskId':task_id, 'Status': status}
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
         if volume_id != None:
