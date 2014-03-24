@@ -1,4 +1,5 @@
 from boto.resultset import ResultSet
+import worker
 
 def match_name(name, param):
     if name==param or 'euca:%s'%name == param:
@@ -47,7 +48,7 @@ class InstanceStoreTask(object):
 
     def startElement(self, name, attrs, connection): 
         if match_name('importImageSet',name):
-            self.import_images =  ResultSet([('item', ImportImage)])
+            self.import_images =  ResultSet([('euca:item', ImportImage)])
             return self.import_images
         elif match_name('convertedImage',name):
             self.converted_image = ConvertedImage()
