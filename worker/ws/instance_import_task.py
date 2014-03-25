@@ -46,9 +46,9 @@ class InstanceStoreTask(object):
         self.import_images = []
         self.converted_image = None
 
-    def startElement(self, name, attrs, connection): 
+    def startElement(self, name, attrs, connection):
         if match_name('importImageSet',name):
-            self.import_images =  ResultSet([('euca:item', ImportImage)])
+            self.import_images = ResultSet([('item', ImportImage)])
             return self.import_images
         elif match_name('convertedImage',name):
             self.converted_image = ConvertedImage()

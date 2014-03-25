@@ -102,11 +102,13 @@ class ImagingTask(object):
             ec2_cert_path =  '%s/ec2cert.pem' % config.RUN_ROOT
             worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
             import_images = task.import_images
+
             converted_image = task.converted_image
             bucket = converted_image.bucket
             prefix = converted_image.prefix
             architecture = converted_image.architecture
             service_key_path = '%s/service.pem' % config.RUN_ROOT
+            # cert_arn =  "arn:aws:iam::201177426256:server-certificate/euca-internal-imaging-worker-01"
             cert_arn = str(task.service_cert_arn)
             worker.ssl.download_server_certificate(cert_arn, service_key_path)
             task = InstanceStoreImagingTask(import_task.task_id, bucket=bucket, prefix=prefix, architecture=architecture, owner_account_id=account_id, owner_access_key=access_key, s3_upload_policy=upload_policy, s3_upload_policy_signature=upload_policy_signature, s3_url=s3_url, ec2_cert_path=ec2_cert_path, service_key_path=service_key_path, import_images=import_images)
@@ -158,9 +160,9 @@ class InstanceStoreImagingTask(ImagingTask):
             manifest_str = manifest_str + '\n' + str(manifest)
         return 'instance-store conversion task - id: %s, bucket: %s, prefix: %s, manifests: %s' % (self.task_id, self.bucket, self.prefix, manifest_str)
 
-    def get_image(self, key, val):
+    def get_image(self, val):
         for image in self.import_images:
-            if image[key] == val:
+            if image.format == val:
                 return image
 
     @staticmethod
@@ -174,28 +176,29 @@ class InstanceStoreImagingTask(ImagingTask):
         try:
             policy_fd = self.get_tmp_file(self.s3_upload_policy)
             sig_fd = self.get_tmp_file(self.s3_upload_policy_signature)
-
-            process = subprocess.Popen(['/usr/libexec/eucalyptus/euca-run-workflow',
-                                        'down-bundle-fs/up-bundle',
-                                        '--image-manifest-url=' + self.get_image('format', 'PARTITION')['download_manifest_url'],
-                                        '--kernel-manifest-url=' + self.get_image('format', 'KERNEL')['download_manifest_url'],
-                                        '--ramdisk-manifest-url=' + self.get_image('format', 'RAMDISK')['download_manifest_url'],
-                                        '--emi=' + self.get_image('format', 'PARTITION')['id'],
-                                        '--eki=' + self.get_image('format', 'KERNEL')['id'],
-                                        '--eri=' + self.get_image('format', 'RAMDISK')['id'],
-                                        '--decryption-key-path=' + self.service_key_path,
-                                        '--encryption-cert-path=' + self.ec2_cert_path,
-                                        '--signing-key-path=' + self.service_key_path,
-                                        '--prefix=' + self.prefix,
-                                        '--bucket=' + self.bucket,
-                                        '--work-dir=/mnt',
-                                        '--arch=' + self.architecture,
-                                        '--account=' + self.owner_account_id,
-                                        '--access-key=' + self.owner_access_key,
-                                        '--object-store-url=' + self.s3_url,
-                                        '--policy=' + policy_fd.name,
-                                        '--policy-signature=' + sig_fd.name],
-                                       stderr=subprocess.PIPE)
+            
+            params = ['/usr/libexec/eucalyptus/euca-run-workflow',
+                      'down-bundle-fs/up-bundle',
+                      '--image-manifest-url=' + self.get_image('PARTITION').download_manifest_url,
+                      '--kernel-manifest-url=' + self.get_image('KERNEL').download_manifest_url,
+                      '--ramdisk-manifest-url=' + self.get_image('RAMDISK').download_manifest_url,
+                      '--emi=' + self.get_image('PARTITION').id,
+                      '--eki=' + self.get_image('KERNEL').id,
+                      '--eri=' + self.get_image('RAMDISK').id,
+                      '--decryption-key-path=' + self.service_key_path,
+                      '--encryption-cert-path=' + self.ec2_cert_path,
+                      '--signing-key-path=' + self.service_key_path,
+                      '--prefix=' + self.prefix,
+                      '--bucket=' + self.bucket,
+                      '--work-dir=/mnt',
+                      '--arch=' + self.architecture,
+                      '--account=' + self.owner_account_id,
+                      '--access-key=' + self.owner_access_key,
+                      '--object-store-url=' + self.s3_url,
+                      '--policy=' + policy_fd.name,
+                      '--policy-signature=' + sig_fd.name]
+            worker.log.debug('Running %s', ' '.join(params))
+            process = subprocess.Popen( params, stderr=subprocess.PIPE )
             self.wait_with_status(process)
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err)
