@@ -22,7 +22,9 @@
 #
 from worker.logutil import log, set_loglevel
 from worker.config import set_pidfile, set_boto_config
-from worker.main_loop import WorkerLoop 
+from worker.main_loop import WorkerLoop
+import worker.config as config
+import worker
 import subprocess
 
 __version__ = '1.0.0-dev'
@@ -46,5 +48,17 @@ def start_worker():
             else:
                 log.info('/dev/vdb is alredy mounted to /mnt')
     except:
-        print "Can't detect VM's id"
+        log.error("Can't detect VM's id")
+        sys.exit(1)
+    # download cloud certificate and save it
+    try:
+        con = worker.ws.connect_euare(host_name=config.get_clc_host(), aws_access_key_id=config.get_access_key_id(),
+                                      aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
+        cert = con.download_cloud_certificate()
+        f = open('%s/cloud.pem'%config.RUN_ROOT, 'w')
+        f.write(cert)
+        f.close()
+    except:
+        log.error("Can't get cloud certificate")
+        sys.exit(1)
     WorkerLoop().start()

@@ -102,7 +102,6 @@ class ImagingTask(object):
             ec2_cert_path =  '%s/ec2cert.pem' % config.RUN_ROOT
             worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
             import_images = task.import_images
-
             converted_image = task.converted_image
             bucket = converted_image.bucket
             prefix = converted_image.prefix
@@ -125,14 +124,14 @@ class ImagingTask(object):
             except Exception:
                 worker.log.warn("Downloadimage subprocess reports invalid status")
             worker.log.debug("Status %s, %d" % (output, bytes_transferred))
-            if self.report_running(self.volume_id, bytes_transferred):
+            if self.report_running(self.volume_id if type(self) is VolumeImagingTask else None, bytes_transferred):
                 worker.log.info('Conversion task %s was canceled by server' % self.task_id)
                 process.kill()
             else:
                 time.sleep(10)
 
 class InstanceStoreImagingTask(ImagingTask):
-    def __init__(self, task_id, bucket=None, prefix=None, architecture=None, owner_account_id=None, owner_access_key=None, s3_upload_policy=None, s3_upload_policy_signature=None,  s3_url=None, ec2_cert_path=None, service_key_path=None, import_images=[]):
+    def __init__(self, task_id, bucket=None, prefix=None, architecture=None, owner_account_id=None, owner_access_key=None, s3_upload_policy=None, s3_upload_policy_signature=None, s3_url=None, ec2_cert_path=None, service_key_path=None, import_images=[]):
         ImagingTask.__init__(self, task_id, "convert_image")
         self.bucket = bucket
         self.prefix = prefix
@@ -143,6 +142,7 @@ class InstanceStoreImagingTask(ImagingTask):
         self.s3_upload_policy_signature = s3_upload_policy_signature
         self.s3_url = s3_url
         self.ec2_cert_path = ec2_cert_path
+        self.cloud_cert_path = '%s/cloud.pem' % config.RUN_ROOT
         self.service_key_path = service_key_path
 
         # list of image manifests that will be the sources of conversion
@@ -172,6 +172,12 @@ class InstanceStoreImagingTask(ImagingTask):
         temp.flush()
         return temp
 
+    @staticmethod
+    def get_manifest_url(url_string):
+        if "imaging@" not in url_string:
+            raise Exception('invalid manifest URL')
+        return url_string.replace('imaging@', '')
+
     def run_task(self):
         try:
             policy_fd = self.get_tmp_file(self.s3_upload_policy)
@@ -179,9 +185,9 @@ class InstanceStoreImagingTask(ImagingTask):
             
             params = ['/usr/libexec/eucalyptus/euca-run-workflow',
                       'down-bundle-fs/up-bundle',
-                      '--image-manifest-url=' + self.get_image('PARTITION').download_manifest_url,
-                      '--kernel-manifest-url=' + self.get_image('KERNEL').download_manifest_url,
-                      '--ramdisk-manifest-url=' + self.get_image('RAMDISK').download_manifest_url,
+                      '--image-manifest-url=' + self.get_manifest_url(self.get_image('PARTITION').download_manifest_url),
+                      '--kernel-manifest-url=' + self.get_manifest_url(self.get_image('KERNEL').download_manifest_url),
+                      '--ramdisk-manifest-url=' + self.get_manifest_url(self.get_image('RAMDISK').download_manifest_url),
                       '--emi=' + self.get_image('PARTITION').id,
                       '--eki=' + self.get_image('KERNEL').id,
                       '--eri=' + self.get_image('RAMDISK').id,
@@ -195,11 +201,13 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--account=' + self.owner_account_id,
                       '--access-key=' + self.owner_access_key,
                       '--object-store-url=' + self.s3_url,
-                      '--policy=' + policy_fd.name,
-                      '--policy-signature=' + sig_fd.name]
+                      '--upload-policy=' + policy_fd.name,
+                      '--upload-policy-signature=' + sig_fd.name,
+                      '--cloud-cert-path=' + self.cloud_cert_path]
             worker.log.debug('Running %s', ' '.join(params))
             process = subprocess.Popen( params, stderr=subprocess.PIPE )
-            self.wait_with_status(process)
+            if process != None:
+                self.wait_with_status(process)
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err)
             return False
@@ -266,8 +274,13 @@ class VolumeImagingTask(ImagingTask):
 
     def download_data(self, manifest_url, device_name):
         manifest = manifest_url.replace('imaging@', '')
+        cloud_cert_path = '%s/cloud.pem' % config.RUN_ROOT
         try:
-            return subprocess.Popen(['/usr/libexec/eucalyptus/euca-run-workflow', 'down-parts/write-raw', '--url-image', manifest, '--output-path', device_name], stderr=subprocess.PIPE)
+            return subprocess.Popen(['/usr/libexec/eucalyptus/euca-run-workflow',
+                                     'down-parts/write-raw', 
+                                     '--url-image', manifest, 
+                                     '--output-path', device_name,
+                                     '--cloud-cert-path', cloud_cert_path], stderr=subprocess.PIPE)
         except Exception, err:
             worker.log.error('Could not start data download: %s' % err)
             return None
