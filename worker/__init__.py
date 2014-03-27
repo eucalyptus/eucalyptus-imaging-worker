@@ -41,7 +41,7 @@ def start_worker():
             log.error('failed to find /dev/vdb or /mnt')
         else:
             if subprocess.call('sudo mount | grep /mnt > /dev/null', shell=True) == 1:
-                if subprocess.call('sudo mkfs.ext3 /dev/vdb > /dev/null', shell=True) != 0 or subprocess.call('sudo mount /dev/vdb /mnt > /dev/null', shell=True) != 0:
+                if subprocess.call('sudo mkfs.ext3 /dev/vdb 2>> /tmp/init.log', shell=True) != 0 or subprocess.call('sudo mount /dev/vdb /mnt 2>> /tmp/init.log', shell=True) != 0:
                     log.error('failed to format and mount /dev/vdb')
                 else:
                     log.info('/dev/vdb was successfully formatted and mounted to /mnt')
