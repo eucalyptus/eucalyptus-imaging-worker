@@ -16,6 +16,7 @@ BuildArch:      noarch
 BuildRequires:  python%{?__python_ver}-devel
 BuildRequires:  python%{?__python_ver}-setuptools
 
+Requires:       eucalyptus
 Requires:       python%{?__python_ver}
 Requires:       python%{?__python_ver}-boto
 Requires:       python%{?__python_ver}-httplib2
@@ -59,9 +60,10 @@ chmod 0640 $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/imaging-worker
 rm -rf $RPM_BUILD_ROOT
 
 %pre
+getent group eucalyptus >/dev/null || groupadd -r eucalyptus
 getent passwd imaging-worker >/dev/null || \
     useradd -d %{_var}/lib/imaging-worker \
-    -M -s /sbin/nologin imaging-worker
+    -M -s /sbin/nologin imaging-worker -G eucalyptus
 
 # Stop running services for upgrade
 if [ "$1" = "2" ]; then
