@@ -176,7 +176,7 @@ class InstanceStoreImagingTask(ImagingTask):
     def get_manifest_url(url_string):
         if "imaging@" not in url_string:
             raise Exception('invalid manifest URL')
-        return url_string.replace('imaging@', '')
+        return url_string
 
     def run_task(self):
         try:
