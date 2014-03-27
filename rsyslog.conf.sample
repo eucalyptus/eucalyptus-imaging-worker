@@ -1,0 +1,10 @@
+# This is sample rsyslog configuration that can be used to enable imaging worker
+# log messages remotely
+# The imaging.imaging_worker_log_server and imaging.imaging_worker_log_server_port
+# Eucalyptus properties should be set to point to the server where rsyslog is
+# configured with the setting like this:
+$ModLoad imudp
+$UDPServerRun 514
+$template FILENAME,"/var/log/%hostname%/daemon.log"
+daemon.* ?FILENAME
+& ~

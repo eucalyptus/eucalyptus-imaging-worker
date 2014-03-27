@@ -26,7 +26,7 @@ python setup.py install
 
 # Setup servo user
 useradd -s /sbin/nologin -d /var/lib/eucalyptus-imaging-worker -M imaging-worker
-install -v -m 0440 scripts/worker-sudo.conf /etc/sudoers.d/imaging-worker
+install -v -m 0440 scripts/imaging-worker-sudo.conf /etc/sudoers.d/imaging-worker
 
 # Setup needed for servo worker
 install -v -m 755 scripts/imaging-worker-init /etc/init.d/eucalyptus-imaging-worker

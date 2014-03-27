@@ -24,11 +24,13 @@ from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
 from boto.iam.connection import IAMConnection
 from worker.ssl.server_cert import ServerCertificate
+from worker.ws.instance_import_task import InstanceImportTask
 import time
 import M2Crypto
 from collections import Iterable
 from lxml import objectify
 import worker
+import worker.config as config
 
 def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -51,7 +53,7 @@ def connect_ec2(host_name=None, port=80, path="services/Eucalyptus", aws_access_
 class EucaEC2Connection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Eucalyptus',
-                 security_token=None, validate_certs=False, port=8773):
+                 security_token=None, validate_certs=False, port=80):
         region=RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id, 
                                 aws_secret_access_key=aws_secret_access_key, port=port, 
@@ -66,10 +68,48 @@ class EucaEC2Connection(object):
     def detach_volume(self, volume_id):
         return self.conn.detach_volume(volume_id)
 
+    def describe_volumes(self, volume_ids=None):
+        return self.conn.get_all_volumes(volume_ids)
+
+    def describe_volume(self, volume_id=None):
+        if volume_id == None:
+           raise RuntimeError("There is no volume_id provoded")
+        res = self.describe_volumes([volume_id, 'verbose'])
+        if len(res) != 1:
+           raise RuntimeError("Can't describe volume %s" % volume_id)
+        else:
+           vol = res[0]
+           if vol.status == 'in-use':
+               return {'status': vol.attach_data.status, 'instance_id': vol.attach_data.instance_id }
+           else:
+               return {'status': vol.status}
+
+    def detach_volume_and_wait(self, volume_id, timeout_sec=3000):
+        if not self.conn.detach_volume(volume_id):
+            raise Exception("Can't detach volume")
+        timeout_time = time.time() + timeout_sec
+        vol = self.describe_volume(volume_id)
+        while vol['status'] != 'available' and time.time() < timeout_time:
+            vol = self.describe_volume(volume_id)
+            time.sleep(5)
+        vol = self.describe_volume(volume_id)
+        return vol['status'] == 'available'
+
+    def attach_volume_and_wait(self, volume_id, instance_id, device_name, timeout_sec=3000):
+        if not self.conn.attach_volume(volume_id, instance_id, device_name):
+            raise Exception("Can't attach volume")
+        timeout_time = time.time() + timeout_sec
+        vol = self.describe_volume(volume_id)
+        while vol['status'] != 'attached' and time.time() < timeout_time:
+            vol = self.describe_volume(volume_id)
+            time.sleep(5)
+        vol = self.describe_volume(volume_id)
+        return vol['status'] == 'attached' and vol['instance_id'] == instance_id
+
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Imaging',
-                 security_token=None, validate_certs=False, port=8773):
+                 security_token=None, validate_certs=False, port=80):
         region=RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
                                 aws_secret_access_key=aws_secret_access_key, port=port, 
@@ -79,24 +119,29 @@ class EucaISConnection(object):
         self.conn.http_connection_kwargs['timeout'] = 30
 
     def get_import_task(self):
-        resp=self.conn.make_request('GetInstanceImportTask', {}, path='/', verb='POST')
-        if resp.status != 200:
-           raise httplib.HTTPException(resp.status, resp.reason, resp.read())
-        root = objectify.XML(resp.read())
-        return { 'task_id': root.importTaskId.text if hasattr(root, 'importTaskId') else None,
-                 'manifest_url': root.manifestUrl.text if hasattr(root, 'manifestUrl') else None,
-                 'volume_id': root.volumeId.text if hasattr(root, 'volumeId') else None }
-
+        params = {'InstanceId':config.get_worker_id()}
+        task = self.conn.get_object('GetInstanceImportTask', params, InstanceImportTask, verb='POST')
+        if not task or not task.task_id :
+            return None
+        else:
+            return task
+    """
+    Communicates conversion status to the server
+    Returns True if task should be canceled
+    """
     def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None):
         if task_id==None or status==None:
             raise RuntimeError("Invalid parameters")
-        params = {'ImportTaskId':task_id, 'Status': status}
+        params = {'InstanceId':config.get_worker_id(), 'ImportTaskId':task_id, 'Status': status}
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
         if volume_id != None:
             params['VolumeId'] = volume_id
-        worker.log.debug('Sending %s to PutInstanceImportTaskStatus' % params)
-        self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
+        resp = self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
+        if resp.status != 200:
+            raise httplib.HTTPException(resp.status, resp.reason, resp.read())
+        root = objectify.XML(resp.read())
+        return 'true' == root.cancelled.text if hasattr(root, 'cancelled') else False
 
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
@@ -114,6 +159,16 @@ class EucaEuareConnection(IAMConnection):
                             path, security_token,
                             validate_certs=validate_certs)
 
+    def download_cloud_certificate(self):
+        resp = self.get_response('DownloadCloudCertificate', {})
+        result = resp['euca:_download_cloud_certificate_response_type']['euca:download_cloud_certificate_result'] 
+        if not result:
+            raise Exception('No certificate is found in the response')
+        cert_b64= result['euca:cloud_certificate']
+        if not cert_b64:
+            raise Exception('No certificate is found in the response')
+        return cert_b64.decode('base64')
+
     def download_server_certificate(self, cert, pk, euare_cert, auth_signature, cert_arn):
         """
         Download server certificate identified with 'cert_arn'. del_certificate and auth_signature
@@ -126,8 +181,7 @@ class EucaEuareConnection(IAMConnection):
         :param delegation_certificate: The certificate to show that this client is delegated to download the user's server certificate
 
         :type auth_signature: string
-        :param auth_signature: The signature by Euare as a proof that the bearer of delegation_certificate is authorized to download server
-                               certificate
+        :param auth_signature: The signature by Euare as a proof that the bearer of delegation_certificate is authorized to download server certificate
  
         """
         timestamp = boto.utils.get_ts()
@@ -155,12 +209,13 @@ class EucaEuareConnection(IAMConnection):
    
         if arn != cert_arn:
             raise Exception("certificate ARN in the response is not valid")
-
+        sig_payload=str(server_cert)+'&'+str(server_pk)
+        sig = str(sig)
         # verify the signature to ensure the response came from EUARE
         cert = M2Crypto.X509.load_cert_string(euare_cert)
         verify_rsa = cert.get_pubkey().get_rsa()
         msg_digest = M2Crypto.EVP.MessageDigest('sha256')
-        msg_digest.update(msg)
+        msg_digest.update(sig_payload)
         if verify_rsa.verify(msg_digest.digest(), sig.decode('base64'), 'sha256') != 1 :
             raise Exception("invalid signature from EUARE")
 
@@ -168,7 +223,6 @@ class EucaEuareConnection(IAMConnection):
         parts = server_pk.split("\n")
         if(len(parts) != 2):
             raise Exception("invalid format of server private key")
-
         symm_key = parts[0]
         cipher = parts[1] 
         try:
@@ -190,3 +244,4 @@ class EucaEuareConnection(IAMConnection):
             raise Exception("failed to decrypt the private key: " + str(err)) 
 
         return s_cert
+

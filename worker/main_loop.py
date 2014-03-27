@@ -18,8 +18,11 @@
 # additional information or have any questions.
 import time
 import config
+import os
+import subprocess
 import worker
 from worker.ws import EucaISConnection
+from worker.imaging_task import ImagingTask
 
 class WorkerLoop(object):
     STOPPED = "stopped"
@@ -37,25 +40,32 @@ class WorkerLoop(object):
         worker.log.debug('main loop running with clc_host=%s, instance_id=%s' % (self.__euca_host, self.__instance_id))
 
     def start(self):
-        self.__status = WorkerLoop.RUNNING 
+        # check if workflow enabled
+        """
+        if subprocess.call(['/usr/libexec/eucalyptus/euca-run-workflow', '-h'], stdout=os.devnull, stderr=os.devnull) != 0:
+            worker.log.error('Failed to find euca-run-workflow. Would not start service')
+            self.__status = WorkerLoop.STOPPED
+        else:
+            self.__status = WorkerLoop.RUNNING
+        """
+        self.__status = WorkerLoop.RUNNING
         while self.__status == WorkerLoop.RUNNING:
             worker.log.info('Querying for new imaging task')
             try:
-                con = EucaISConnection(host_name=worker.config.get_clc_host(), aws_access_key_id=config.get_access_key_id(),
-                          aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
-                res = con.get_import_task()
-                if res['task_id'] != None:
-                    task = ImagingTask(res['task_id'], res['manifest_url'], res['volume_id'])
-                    # task processing
-                    worker.log.info('Processing import task %s' % task.task_id)
+                con = worker.ws.connect_imaging_worker(host_name=self.__euca_host, aws_access_key_id=config.get_access_key_id(), 
+                                             aws_secret_access_key=config.get_secret_access_key(), security_token=config.get_security_token())
+                import_task = con.get_import_task()
+                task = ImagingTask.from_import_task(import_task)
+                if task:
+                    worker.log.info('Processing import task %s' % task)
                     if task.process_task():
                         worker.log.info('Done processing task %s' % task.task_id)
                     else:
                         worker.log.warn('Processing of the task %s failed' % task.task_id)
                 else:
-                    worker.log.info('There are no task to process')
+                    pass
             except Exception, err:
-                worker.log.error('Failed to query the imaging worker: %s' % err)
+                worker.log.error('Failed to query imaging service: %s' % err)
 
             start_time = time.time()
             while time.time() - start_time < config.QUERY_PERIOD_SEC and self.__status == WorkerLoop.RUNNING:

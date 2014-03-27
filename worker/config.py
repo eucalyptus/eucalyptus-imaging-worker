@@ -17,7 +17,6 @@
 # additional information or have any questions.
 import os
 import httplib2
-import worker
 import boto
 import boto.provider
 
@@ -27,7 +26,7 @@ CONF_ROOT = "/etc/eucalyptus-imaging-worker"
 RUN_ROOT = "/var/lib/eucalyptus-imaging-worker"
 SUDO_BIN = "/usr/bin/sudo"
 
-FLOPPY_MOUNT_DIR = "/mnt/floppy"
+FLOPPY_MOUNT_DIR = RUN_ROOT+"/floppy"
 
 # Apply default values in case user does not specify
 pidfile = DEFAULT_PIDFILE
@@ -64,6 +63,9 @@ def query_user_data():
     resp, content = httplib2.Http().request("http://169.254.169.254/latest/user-data")
     if resp['status'] != '200' or len(content) <= 0:
         raise Exception('could not query the userdata')
+    #remove extra euca-.... line
+    lines = content.split('\n')
+    content = lines[len(lines)-1]
     #format of userdata = "key1=value1;key2=value2;..."
     kvlist = content.split(';')
     for word in kvlist:
@@ -71,14 +73,14 @@ def query_user_data():
         if len(kv) == 2:
             user_data_store[kv[0]]=kv[1] 
 
-def get_value(key):
+def get_value(key, optional=False):
     if key in user_data_store:
-       return user_data_store[key]
+        return user_data_store[key]
     else:
         query_user_data()
-        if key not in user_data_store:
-            raise Exception('could not find %s' % key) 
-        return user_data_store[key]
+        if key not in user_data_store and not optional:
+            raise Exception('could not find %s' % key)
+        return None if optional else user_data_store[key]
 
 def get_access_key_id(): 
     akey = get_provider().get_access_key()
@@ -97,16 +99,20 @@ def get_clc_host():
 
 def get_clc_port():
     val=get_value('eucalyptus_port')
-    if val is not None:
-        return int(val)
-    else:
-        return val
+    return int(val) if val is not None else None
 
 def get_ec2_path():
     return get_value('ec2_path')
 
 def get_imaging_path():
     return get_value('imaging_path')
+
+def get_log_server():
+    return get_value('log_server', optional=True)
+
+def get_log_server_port():
+    val=get_value('log_server_port', optional=True)
+    return int(val) if val is not None else None
 
 __availability_zone = None
 def get_availability_zone():
