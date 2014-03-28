@@ -187,9 +187,9 @@ class InstanceStoreImagingTask(ImagingTask):
             
             params = ['/usr/libexec/eucalyptus/euca-run-workflow',
                       'down-bundle-fs/up-bundle',
-                      "--image-manifest-url='%s'" % self.get_manifest_url(self.get_image('PARTITION').download_manifest_url),
-                      "--kernel-manifest-url='%s'" % self.get_manifest_url(self.get_image('KERNEL').download_manifest_url),
-                      "--ramdisk-manifest-url='%s'" % self.get_manifest_url(self.get_image('RAMDISK').download_manifest_url),
+                      "--image-manifest-url=%s" % self.get_manifest_url(self.get_image('PARTITION').download_manifest_url),
+                      "--kernel-manifest-url=%s" % self.get_manifest_url(self.get_image('KERNEL').download_manifest_url),
+                      "--ramdisk-manifest-url=%s" % self.get_manifest_url(self.get_image('RAMDISK').download_manifest_url),
                       '--emi=' + self.get_image('PARTITION').id,
                       '--eki=' + self.get_image('KERNEL').id,
                       '--eri=' + self.get_image('RAMDISK').id,
