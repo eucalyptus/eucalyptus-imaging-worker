@@ -23,7 +23,7 @@ import boto.provider
 DEFAULT_PID_ROOT = "/var/run/eucalyptus-imaging-worker"
 DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_ROOT, "eucalyptus-imaging-worker.pid")
 CONF_ROOT = "/etc/eucalyptus-imaging-worker"
-RUN_ROOT = "/var/lib/eucalyptus-imaging-worker"
+RUN_ROOT = "/var/lib/eucalyptus/keys" # "/var/lib/eucalyptus-imaging-worker"
 SUDO_BIN = "/usr/bin/sudo"
 
 FLOPPY_MOUNT_DIR = RUN_ROOT+"/floppy"

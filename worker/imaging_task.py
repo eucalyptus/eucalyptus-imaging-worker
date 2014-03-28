@@ -99,17 +99,19 @@ class ImagingTask(object):
             upload_policy_signature = task.upload_policy_signature
             s3_url = task.s3_url
             ec2_cert = task.ec2_cert.decode('base64')
-            ec2_cert_path =  '%s/ec2cert.pem' % config.RUN_ROOT
+            ec2_cert_path =  '%s/cloud-cert.pem' % config.RUN_ROOT
             worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
             import_images = task.import_images
             converted_image = task.converted_image
             bucket = converted_image.bucket
             prefix = converted_image.prefix
             architecture = converted_image.architecture
-            service_key_path = '%s/service.pem' % config.RUN_ROOT
-            # cert_arn =  "arn:aws:iam::201177426256:server-certificate/euca-internal-imaging-worker-01"
+            service_key_path = '%s/node-pk.pem' % config.RUN_ROOT
+            service_cert_path = '%s/node-cert.pem' % config.RUN_ROOT
             cert_arn = str(task.service_cert_arn)
-            worker.ssl.download_server_certificate(cert_arn, service_key_path)
+            cert = worker.ssl.download_server_certificate(cert_arn)
+            worker.ssl.write_certificate(service_key_path, cert.get_private_key())
+            worker.ssl.write_certificate(service_cert_path, cert.get_certificate())
             task = InstanceStoreImagingTask(import_task.task_id, bucket=bucket, prefix=prefix, architecture=architecture, owner_account_id=account_id, owner_access_key=access_key, s3_upload_policy=upload_policy, s3_upload_policy_signature=upload_policy_signature, s3_url=s3_url, ec2_cert_path=ec2_cert_path, service_key_path=service_key_path, import_images=import_images)
         return task
 
@@ -185,9 +187,9 @@ class InstanceStoreImagingTask(ImagingTask):
             
             params = ['/usr/libexec/eucalyptus/euca-run-workflow',
                       'down-bundle-fs/up-bundle',
-                      '--image-manifest-url=' + self.get_manifest_url(self.get_image('PARTITION').download_manifest_url),
-                      '--kernel-manifest-url=' + self.get_manifest_url(self.get_image('KERNEL').download_manifest_url),
-                      '--ramdisk-manifest-url=' + self.get_manifest_url(self.get_image('RAMDISK').download_manifest_url),
+                      "--image-manifest-url='%s'" % self.get_manifest_url(self.get_image('PARTITION').download_manifest_url),
+                      "--kernel-manifest-url='%s'" % self.get_manifest_url(self.get_image('KERNEL').download_manifest_url),
+                      "--ramdisk-manifest-url='%s'" % self.get_manifest_url(self.get_image('RAMDISK').download_manifest_url),
                       '--emi=' + self.get_image('PARTITION').id,
                       '--eki=' + self.get_image('KERNEL').id,
                       '--eri=' + self.get_image('RAMDISK').id,
@@ -205,9 +207,13 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--upload-policy-signature=' + sig_fd.name,
                       '--cloud-cert-path=' + self.cloud_cert_path]
             worker.log.debug('Running %s', ' '.join(params))
-            process = subprocess.Popen( params, stderr=subprocess.PIPE )
-            if process != None:
-                self.wait_with_status(process)
+            # added for debug TODO: remove later
+            out = open("/tmp/stdout.txt","wb")
+            err = open("/tmp/stderr.txt","wb")
+            # Just call 'call' for now. TODO:add some status pushing to server
+            process = subprocess.call( params, stderr=err, stdout=out )
+            out.close()
+            err.close()
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err)
             return False
