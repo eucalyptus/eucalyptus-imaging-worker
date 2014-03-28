@@ -33,7 +33,11 @@ install -v -m 755 scripts/imaging-worker-init /etc/init.d/eucalyptus-imaging-wor
 sed -i 's/LOGLEVEL=info/LOGLEVEL=debug/' /etc/init.d/eucalyptus-imaging-worker
 # Use set gid for imaging-worker owned directories
 mkdir -p /var/{run,lib,log}/eucalyptus-imaging-worker
+# TMP keys location (TODO:remove this later)
+mkdir -p /var/lib/eucalyptus/keys
 install -v -m 6700 -o imaging-worker -g imaging-worker -d /var/{run,lib,log}/eucalyptus-imaging-worker
+# TODO:remove this later
+install -v -m 6700 -o imaging-worker -g imaging-worker -d /var/lib/eucalyptus/keys
 chown imaging-worker:imaging-worker -R /etc/eucalyptus-imaging-worker
 chmod 700 /etc/eucalyptus-imaging-worker
 
