@@ -16,7 +16,6 @@ BuildArch:      noarch
 BuildRequires:  python%{?__python_ver}-devel
 BuildRequires:  python%{?__python_ver}-setuptools
 
-Requires:       eucalyptus
 Requires:       eucalyptus-imaging-toolkit
 Requires:       python%{?__python_ver}
 Requires:       python%{?__python_ver}-boto
@@ -24,7 +23,6 @@ Requires:       python%{?__python_ver}-httplib2
 Requires:       python-lxml
 Requires:       python-requests
 Requires:       python-m2ext
-Requires:       shadow-utils
 Requires:       sudo
 Requires:       ntp
 Requires:       ntpdate
