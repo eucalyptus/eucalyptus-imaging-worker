@@ -24,6 +24,7 @@ import config
 import worker
 import subprocess
 import httplib2
+import base64
 from lxml import objectify
 from worker.ws import EucaEC2Connection
 from worker.ws import EucaISConnection
@@ -140,7 +141,7 @@ class InstanceStoreImagingTask(ImagingTask):
         self.architecture = architecture
         self.owner_account_id = owner_account_id
         self.owner_access_key = owner_access_key
-        self.s3_upload_policy = s3_upload_policy
+        self.s3_upload_policy = base64.b64decode(s3_upload_policy)
         self.s3_upload_policy_signature = s3_upload_policy_signature
         self.s3_url = s3_url
         self.ec2_cert_path = ec2_cert_path
@@ -182,9 +183,6 @@ class InstanceStoreImagingTask(ImagingTask):
 
     def run_task(self):
         try:
-            policy_fd = self.get_tmp_file(self.s3_upload_policy)
-            sig_fd = self.get_tmp_file(self.s3_upload_policy_signature)
-            
             params = ['/usr/libexec/eucalyptus/euca-run-workflow',
                       'down-bundle-fs/up-bundle',
                       "--image-manifest-url=%s" % self.get_manifest_url(self.get_image('PARTITION').download_manifest_url),
@@ -203,8 +201,8 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--account=' + self.owner_account_id,
                       '--access-key=' + self.owner_access_key,
                       '--object-store-url=' + self.s3_url,
-                      '--upload-policy=' + policy_fd.name,
-                      '--upload-policy-signature=' + sig_fd.name,
+                      '--upload-policy=' + self.s3_upload_policy,
+                      '--upload-policy-signature=' + self.s3_upload_policy_signature,
                       '--cloud-cert-path=' + self.cloud_cert_path]
             worker.log.debug('Running %s', ' '.join(params))
             # added for debug TODO: remove later
@@ -217,9 +215,6 @@ class InstanceStoreImagingTask(ImagingTask):
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err)
             return False
-        finally:
-            policy_fd.close()
-            sig_fd.close()
         return True
 
 class VolumeImagingTask(ImagingTask):
