@@ -66,11 +66,10 @@ class WorkerLoop(object):
                     pass
             except Exception, err:
                 worker.log.error('Failed to query imaging service: %s' % err)
-
-            start_time = time.time()
-            while time.time() - start_time < config.QUERY_PERIOD_SEC and self.__status == WorkerLoop.RUNNING:
-                worker.log.debug('sleeping')
-                time.sleep(10)
+            query_period = config.QUERY_PERIOD_SEC
+            while query_period > 0 and self.__status == WorkerLoop.RUNNING:
+                time.sleep(1)
+                query_period -= 1
 
         worker.log.info('Exiting')
         self.__status = WorkerLoop.STOPPED
