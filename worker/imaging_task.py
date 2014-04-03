@@ -92,6 +92,9 @@ class ImagingTask(object):
             if manifests and len(manifests) > 0:
                 manifest_url = manifests[0].manifest_url
             task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id)
+            ec2_cert = import_task.volume_task.ec2_cert.decode('base64')
+            ec2_cert_path =  '%s/cloud-cert.pem' % config.RUN_ROOT
+            worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
         elif import_task.task_type == "convert_image" and import_task.instance_store_task:
             task = import_task.instance_store_task
             account_id = task.account_id
@@ -145,7 +148,7 @@ class InstanceStoreImagingTask(ImagingTask):
         self.s3_upload_policy_signature = s3_upload_policy_signature
         self.s3_url = s3_url
         self.ec2_cert_path = ec2_cert_path
-        self.cloud_cert_path = '%s/cloud.pem' % config.RUN_ROOT
+        self.cloud_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
         self.service_key_path = service_key_path
 
         # list of image manifests that will be the sources of conversion
@@ -239,8 +242,13 @@ class VolumeImagingTask(ImagingTask):
         return retlist
 
     def get_partition_size(self, partition):
-        p = subprocess.Popen(["blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
-        return int(p.communicate()[0])        
+        p = subprocess.Popen(["sudo", "blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
+        t = p.communicate()[0]
+        worker.log.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition))
+        return int(t.rstrip('\n'))
+
+    def add_write_permission(self, partition):
+        subprocess.call(["sudo", "chmod", "a+w", partition])
 
     def get_manifest(self):
         if "imaging@" not in self.manifest_url:
@@ -275,13 +283,15 @@ class VolumeImagingTask(ImagingTask):
 
     def download_data(self, manifest_url, device_name):
         manifest = manifest_url.replace('imaging@', '')
-        cloud_cert_path = '%s/cloud.pem' % config.RUN_ROOT
+        cloud_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
         try:
-            return subprocess.Popen(['/usr/libexec/eucalyptus/euca-run-workflow',
-                                     'down-parts/write-raw', 
-                                     '--url-image', manifest, 
-                                     '--output-path', device_name,
-                                     '--cloud-cert-path', cloud_cert_path], stderr=subprocess.PIPE)
+            params = ['/usr/libexec/eucalyptus/euca-run-workflow',
+                      'down-parts/write-raw',
+                      '--import-manifest-url', manifest,
+                      '--output-path', device_name,
+                      '--cloud-cert-path', cloud_cert_path]
+            worker.log.debug('Running %s', ' '.join(params))
+            return subprocess.Popen( params, stderr=subprocess.PIPE )
         except Exception, err:
             worker.log.error('Could not start data download: %s' % err)
             return None
@@ -312,6 +322,7 @@ class VolumeImagingTask(ImagingTask):
             if self.volume_id != None:
                 worker.log.info('Attaching volume %s' % self.volume_id)  
                 device_to_use = self.attach_volume()
+                worker.log.debug('Using %s as destination' % device_to_use) 
                 device_size = self.get_partition_size(device_to_use)
                 worker.log.debug('Attached device size is %d bytes' % device_size)
                 worker.log.debug('Needed for image/volume %d bytes' % image_size)
@@ -319,6 +330,7 @@ class VolumeImagingTask(ImagingTask):
                     self.image_size = 0
                     raise Exception('Device is too small for the image/volume')
                 try:
+                    self.add_write_permission(device_to_use)
                     self.run_download_to_volume(device_to_use)
                     done_with_errors = False
                 except Exception, err:
