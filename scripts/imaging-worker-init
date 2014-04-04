@@ -35,7 +35,7 @@ PROCESS=/usr/bin/eucalyptus-imaging-worker
 PIDFILE=/var/run/eucalyptus-imaging-worker/worker.pid
 BOTO_CONFIG=/etc/eucalyptus-imaging-worker/boto.cfg
 SERVOUSER=imaging-worker
-LOGLEVEL=info
+LOGLEVEL=debug
 
 LOCKFILE=/var/lock/subsys/eucalyptus-imaging-worker
 
