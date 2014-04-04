@@ -123,14 +123,14 @@ class ImagingTask(object):
         while process.poll() == None:
             # get bytes transfered
             output=process.stderr.readline().strip()
-            bytes_transferred = 0
+            self.bytes_transferred = 0
             try:
                 res = json.loads(output)
-                bytes_transferred = res['status']['bytes_downloaded']
+                self.bytes_transferred = res['status']['bytes_downloaded']
             except Exception:
                 worker.log.warn("Downloadimage subprocess reports invalid status")
-            worker.log.debug("Status %s, %d" % (output, bytes_transferred))
-            if self.report_running(self.volume_id if type(self) is VolumeImagingTask else None, bytes_transferred):
+            worker.log.debug("Status %s, %d" % (output, self.bytes_transferred))
+            if self.report_running(self.volume_id if type(self) is VolumeImagingTask else None, self.bytes_transferred):
                 worker.log.info('Conversion task %s was canceled by server' % self.task_id)
                 process.kill()
             else:

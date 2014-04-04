@@ -80,7 +80,7 @@ class EucaEC2Connection(object):
         else:
            vol = res[0]
            if vol.status == 'in-use':
-               return {'status': vol.attach_data.status, 'instance_id': vol.attach_data.instance_id }
+               return {'status': vol.attachment_state(), 'instance_id': vol.attach_data.instance_id }
            else:
                return {'status': vol.status}
 
