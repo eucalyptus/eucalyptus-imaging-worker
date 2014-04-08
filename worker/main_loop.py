@@ -20,6 +20,7 @@ import time
 import config
 import os
 import subprocess
+import traceback
 import worker
 from worker.ws import EucaISConnection
 from worker.imaging_task import ImagingTask
@@ -68,7 +69,9 @@ class WorkerLoop(object):
                 else:
                     pass
             except Exception, err:
-                worker.log.error('Failed to query imaging service: %s' % err)
+                tb = traceback.format_exc()
+                worker.log.error(str(tb) +
+                                 '\nFailed to query imaging service: %s' % err)
             query_period = config.QUERY_PERIOD_SEC
             while query_period > 0 and self.__status == WorkerLoop.RUNNING:
                 time.sleep(1)

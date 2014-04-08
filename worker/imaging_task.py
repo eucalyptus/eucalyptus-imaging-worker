@@ -19,10 +19,13 @@ import tempfile
 import time
 import json
 import os
+import re
+import requests
 import string
 import config
 import worker
 import subprocess
+import traceback
 import httplib2
 import base64
 import threading
@@ -257,27 +260,41 @@ class InstanceStoreImagingTask(ImagingTask):
 
 
 class VolumeImagingTask(ImagingTask):
+    _GIG_ = 1073741824
     def __init__(self, task_id, manifest_url=None, volume_id=None):
         ImagingTask.__init__(self, task_id, "import_volume")
         self.manifest_url = manifest_url
+        self.ec2_conn = worker.ws.connect_ec2(
+            host_name=config.get_clc_host(),
+            aws_access_key_id=config.get_access_key_id(),
+            aws_secret_access_key=config.get_secret_access_key(),
+            security_token=config.get_security_token())
+        self.volume = None
         self.volume_id = volume_id
-        self.ec2_conn = worker.ws.connect_ec2(host_name=config.get_clc_host(),
-                                              aws_access_key_id=config.get_access_key_id(),
-                                              aws_secret_access_key=config.get_secret_access_key(),
-                                              security_token=config.get_security_token())
+        if self.volume_id:
+            self.volume = self.ec2_conn.conn.get_all_volumes([self.volume_id])
+        if not self.volume:
+            raise ValueError('Request for volume:"{0}" returned:"{1}"'
+                             .format(volume_id, str(self.volume)))
+        self.volume = self.volume[0]
+        self.volume_attached_dev = None
+        self.instance_id = config.get_worker_id()
+
 
     def __repr__(self):
         return 'volume conversion task:%s' % self.task_id
 
     def __str__(self):
-        return 'Task: {0}, manifest url: {1}, volume id: {2}'.format(self.task_id, self.manifest_url,
-                                                                     self.volume_id)
+        return ('Task: {0}, manifest url: {1}, volume id: {2}'
+                .format(self.task_id, self.manifest_url,self.volume.id))
 
     def get_block_devices(self):
         retlist = []
         for filename in os.listdir('/dev'):
             if any(filename.startswith(prefix) for prefix in ('sd', 'xvd', 'vd', 'xd')):
-                retlist.append('/dev/' + filename)
+                filename = re.sub('\d', '', filename)
+                if not '/dev/'+filename in retlist:
+                    retlist.append('/dev/' + filename)
         return retlist
 
     def get_partition_size(self, partition):
@@ -300,25 +317,117 @@ class VolumeImagingTask(ImagingTask):
 
     def next_device_name(self, all_dev):
         device = all_dev[0]
-        lc = device[len(device) - 1:]
-        if lc in string.digits:
-            device = device[0:len(device) - 1]
-        lc = device[len(device) - 1:]
-        return device[0:len(device) - 1] + chr(ord(lc) + 1)
+        device = re.sub('\d', '', device.strip())
+        last_char = device[-1]
+        device_prefix = device.rstrip(last_char)
+        # todo use boto here instead of metadata? Need sec token then?
+        # block_device_mapping = self.ec2_conn.conn.get_instance_attribute(
+        #   instance_id=self.instance_id, attribute='blockdevicemapping')
 
-    def attach_volume(self):
-        if self.volume_id == None:
+        block_device_mapping = self._get_block_device_mapping_metadata()
+        # iterate through local devices as well as cloud block device mapping
+        for x in xrange(ord(last_char)+1, ord('z')):
+            next_device = device_prefix+chr(x)
+            if (not next_device in all_dev) and \
+                (not next_device in block_device_mapping) and \
+                (not os.path.basename(next_device) in block_device_mapping):
+                # Device is not in use locally or in block dev map
+                return next_device
+        # if a free device was found increment device name and re-enter
+        return self.next_device_name(device_prefix + "aa")
+
+    def _get_metadata(self, path, basepath='http://169.254.169.254/'):
+        for x in xrange(0,3):
+            try:
+                r = requests.get(os.path.join(basepath, path.lstrip('/')))
+                r.raise_for_status()
+                break
+            except:
+                if x >= 2:
+                    raise
+                time.sleep(1)
+        return r.content
+
+    def _get_block_device_mapping_metadata(self):
+        devlist = []
+        bdm_path = '/latest/meta-data/block-device-mapping'
+        bdm = self._get_metadata(path=bdm_path)
+        for bmap in bdm.splitlines():
+            new_dev = self._get_metadata(path=os.path.join(bdm_path, bmap))
+            if new_dev:
+                devlist.append(new_dev.strip())
+        return devlist
+
+
+    def attach_volume(self, local_dev_timeout=120):
+        new_device_name = None
+        if not self.volume:
             raise RuntimeError('This import does not have a volume')
+        instance_id = self.instance_id
         devices_before = self.get_block_devices()
         device_name = self.next_device_name(devices_before)
-        instance_id = config.get_worker_id()
-        worker.log.debug('attaching volume {0} to {1} as {2}'.format(self.volume_id, instance_id, device_name))
-        if not self.ec2_conn.attach_volume_and_wait(self.volume_id, instance_id, device_name):
-            raise RuntimeError('Can not attach volume {0} to the instance {1}'.format(
-                self.volume_id, instance_id))
-        new_block_devices = self.get_block_devices()
-        new_device_name = new_block_devices[0]  # can it be different from device_name?
+        worker.log.info('attaching volume {0} to {1} as {2}'.
+                        format(self.volume.id, instance_id, device_name))
+        self.ec2_conn.attach_volume_and_wait(self.volume.id,
+                                             instance_id,
+                                             device_name)
+        elapsed = 0
+        start = time.time()
+        while elapsed < local_dev_timeout and not new_device_name:
+            new_block_devices = self.get_block_devices()
+            worker.log.info('Waiting for local dev for volume: "{0}", '
+                            'elapsed:{1}'.format(self.volume.id, elapsed))
+            diff_list = list(set(new_block_devices) - set(devices_before))
+            if diff_list:
+                for dev in diff_list:
+                    # If this is virtio attempt to verify vol to dev mapping
+                    # using serial number field info
+                    if not os.path.basename(dev).startswith('vd'):
+                        self.verify_virtio_volume_block_device(
+                            volume_id=self.volume.id,
+                            blockdev=dev)
+                    new_device_name = dev
+                    break
+            elapsed = time.time() - start
+            if elapsed < local_dev_timeout:
+                time.sleep(2)
+        if not new_device_name:
+            raise RuntimeError('Could find local device for volume:"{0}"'
+                               .format(self.volume.id))
+        self.volume_attached_dev = new_device_name
         return new_device_name
+
+    def verify_virtio_volume_block_device(self,
+                                          volume_id,
+                                          blockdev,
+                                          syspath='/sys/block/'):
+        '''
+        Attempts to verify a given volume id to a local block device when
+        using kvm. In eucalyptus the serial number provides the volume
+        id and the requested block device mapping in the
+        format: vol-<id>-<dev name>.
+        Example: "vol-abcd1234-dev-vdf"
+        :param volume_id: string volume id. example. vol-abcd1234
+        :param blockdev: block device. Example 'vdf' or '/dev/vdf'
+        :param syspath: option dir to begin looking for dev serial num to map
+        '''
+        if not blockdev.startswith('vd'):
+            return
+        for devdir in os.listdir(syspath):
+            serialpath = os.path.join(syspath + devdir + '/serial')
+            if os.path.isfile(serialpath):
+                with open(serialpath) as devfile:
+                        serial=devfile.read()
+                if serial.startswith(volume_id):
+                        break
+        if os.path.basename(blockdev) == devdir:
+            worker.log.debug('validated volume:"{0}" at dev:"{1}" '
+                             'via serial number: '
+                             .format(volume_id, blockdev))
+            return
+        else:
+            raise ValueError('Device for volume: {0} could not be verfied'
+                             ' against dev:{1}'.format(volume_id, blockdev))
 
     def download_data(self, manifest_url, device_name):
         manifest = manifest_url.replace('imaging@', '')
@@ -335,16 +444,50 @@ class VolumeImagingTask(ImagingTask):
             worker.log.error('Could not start data download: %s' % err)
             return None
 
-    def detach_volume(self):
-        if self.volume_id is None:
+    def detach_volume(self, timeout_sec=3000, local_dev_timeout=30):
+        worker.log.info('Detaching volume %s' % self.volume.id)
+        if self.volume == None:
             raise RuntimeError('This import does not have volume id')
-        worker.log.debug('detaching volume {0}'.format(self.volume_id))
+        worker.log.debug('detaching volume {0}'.format(self.volume.id))
         devices_before = self.get_block_devices()
-        if not self.ec2_conn.detach_volume_and_wait(self.volume_id):
-            raise RuntimeError('Can not dettach volume {0}'.format(self.volume_id))  #todo: add specific error?
-        if len(devices_before) == len(self.get_block_devices()):
-            raise RuntimeError(
-                'Volume was not dettached in {0} seconds'.format(timeout_sec))  #todo: add specific error?
+        self.volume.update()
+        # Do not attempt to detach a volume which is not attached/attaching, or
+        # is not attached to this instance
+        this_instance_id = config.get_worker_id()
+        attached_state = self.volume.attachment_state()
+        if not attached_state \
+            or not attached_state.startswith('attach') \
+            or (hasattr(self.volume,'attach_data')
+                and self.volume.attach_data.instance_id != this_instance_id):
+                self.volume_attached_dev = None
+                return True
+        # Begin detaching from this instance
+        if not self.ec2_conn.detach_volume_and_wait(self.volume.id,
+                                                    timeout_sec=timeout_sec):
+            raise RuntimeError('Can not dettach volume {0}'
+                               .format(self.volume.id)) #todo: add specific error?
+        # If the attached dev is known, verify it is no longer present.
+        if self.volume_attached_dev:
+            elapsed = 0
+            start=time.time()
+            devices_after = devices_before
+            while elapsed < local_dev_timeout:
+                new_block_devices = self.get_block_devices()
+                devices_after = list(set(devices_before) - set(new_block_devices))
+                if not self.volume_attached_dev in devices_after:
+                    break
+                else:
+                    time.sleep(2)
+                elapsed = time.time() - start
+            if self.volume_attached_dev in devices_after:
+                # todo: add specific error?
+                self.volume.update()
+                worker.log.error('Volume:"{0}" state:"{1}". Local device:"{2}"'
+                                 'found on guest after {3} seconds'
+                                 .format(self.volume.id,
+                                 self.volume.status,
+                                 self.volume.local_blockdev,
+                                 timeout_sec))
         return True
 
     def run_download_to_volume(self, device_to_use):
@@ -359,8 +502,14 @@ class VolumeImagingTask(ImagingTask):
             device_to_use = None
             manifest = self.get_manifest()
             image_size = int(manifest.image.size)
-            if self.volume_id is not None:
-                worker.log.info('Attaching volume %s' % self.volume_id)
+            if self.volume != None:
+                if long(int(self.volume.size) * self._GIG_) < image_size:
+                    raise ValueError('Volume:"{1}" size:"{1}" is too small '
+                                     'for image to be processed:"{2}"'
+                                     .format(self.volume.id,
+                                             self.volume.size,
+                                             image_size))
+                worker.log.info('Attaching volume %s' % self.volume.id)
                 report_thread = ReportThread(self.report_running)
                 report_thread.start()
                 device_to_use = self.attach_volume()
@@ -386,12 +535,19 @@ class VolumeImagingTask(ImagingTask):
             else:
                 return True
         except Exception, err:
-            worker.log.error('Failed to process task: %s' % err)
+            tb = traceback.format_exc()
+            worker.log.error(str(tb) + '\nFailed to process task: %s' % err)
         finally:
             # detaching volume
             if device_to_use is not None:
                 worker.log.info('Detaching volume %s' % self.volume_id)
                 report_thread = ReportThread(self.report_running)
                 report_thread.start()
-                self.detach_volume()
-                report_thread.stop()
+                try:
+                    if self.volume_id:
+                        self.ec2_conn.detach_volume_and_wait(
+                            volume_id=self.volume_id)
+                finally:
+                    report_thread.stop()
+
+

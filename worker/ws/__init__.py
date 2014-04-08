@@ -89,26 +89,91 @@ class EucaEC2Connection(object):
                 return {'status': vol.status}
 
     def detach_volume_and_wait(self, volume_id, timeout_sec=3000):
-        if not self.conn.detach_volume(volume_id):
-            raise Exception("Can't detach volume")
-        timeout_time = time.time() + timeout_sec
-        vol = self.describe_volume(volume_id)
-        while vol['status'] != 'available' and time.time() < timeout_time:
-            vol = self.describe_volume(volume_id)
+        '''
+        Attempts to detach a volume, and wait for the volume's status
+        to become 'available'. Will raise RunTimeError upon failure.
+        :param volume_id: string representing volume id. ie: vol-abcd1234
+        :param timeout_sec: Timeout to wait for volume to detach in seconds
+        '''
+        vol = None
+        vols = self.conn.get_all_volumes(volume_id)
+        for vol in vols:
+            if vol.id == volume_id:
+                break
+        if not vol or vol.id != volume_id:
+            raise RuntimeError('Failed to lookup volume:"{0}" from system'
+                               .format(volume_id))
+        attachment_state = vol.attachment_state()
+        if attachment_state and attachment_state != 'detaching':
+            vol.detach()
+        start = time.time()
+        elapsed = 0
+        while elapsed < timeout_sec:
+            vol.update()
+            if vol.status == 'available' or vol.status.startswith('delet'):
+                worker.log.info('detach_volume_and_wait volume status: "{0}"'
+                                .format(vol.status))
+                return
             time.sleep(5)
-        vol = self.describe_volume(volume_id)
-        return vol['status'] == 'available'
+            elapsed = time.time() - start
+        # Volume has failed to detach within the given timeout raise error
+        instance = 'unknown'
+        if hasattr(vol, "attach_data"):
+            instance = str(vol.attach_data.instance_id)
+        raise RuntimeError('Volume:"{0}" failed to detach from:"{1}". '
+                           'Status:"{2}", elapsed: {3}/{4}'
+                           .format(vol.id, vol.status, elapsed, timeout_sec))
 
-    def attach_volume_and_wait(self, volume_id, instance_id, device_name, timeout_sec=3000):
-        if not self.conn.attach_volume(volume_id, instance_id, device_name):
-            raise Exception("Can't attach volume")
-        timeout_time = time.time() + timeout_sec
-        vol = self.describe_volume(volume_id)
-        while vol['status'] != 'attached' and time.time() < timeout_time:
-            vol = self.describe_volume(volume_id)
-            time.sleep(5)
-        vol = self.describe_volume(volume_id)
-        return vol['status'] == 'attached' and vol['instance_id'] == instance_id
+    def attach_volume_and_wait(self,
+                               volume_id,
+                               instance_id,
+                               device_name,
+                               poll_interval=5,
+                               timeout_sec=300):
+        '''
+        Attempts to attach a volume and wait for the correct attached status.
+
+        '''
+        vol = None
+        vols = self.conn.get_all_volumes(volume_id)
+        for vol in vols:
+            if vol.id == volume_id:
+                break
+        if not vol or vol.id != volume_id:
+            raise RuntimeError('Failed to lookup volume:"{0}" from system'
+                               .format(volume_id))
+        # Attempt to attach
+        vol.attach(instance_id=instance_id, device=device_name)
+        # Monitor attached state to attached or failure
+        start = time.time()
+        vol.update()
+        while vol.attachment_state() != 'attached':
+            time.sleep(poll_interval)
+            elapsed = time.time() - start
+            # Catch failure states and raise error
+            if elapsed > timeout_sec or \
+                vol.status == 'available' or \
+                vol.status.startswith('delet'):
+                raise RuntimeError('Failed to attach volume:"{0}" '
+                                   'to attach to:"{1}". Status:"{2}". '
+                                   'Elapsed:"{3}/{4}"'.format(volume_id,
+                                                          instance_id,
+                                                          vol.status,
+                                                          elapsed,
+                                                          timeout_sec))
+            time.sleep(poll_interval)
+            vol.update()
+        # Final check for correct volume attachment
+        attached_id = vol.attach_data.instance_id
+        if attached_id != instance_id:
+            raise RuntimeError('Volume:"{0}" not attached to correct '
+                               'instance:"{1}". Status:"{2}". Attached:"{3}".'
+                               'Elapsed:"{4}/{5}"'.format(volume_id,
+                                                          instance_id,
+                                                          vol.status,
+                                                          attached_id,
+                                                          elapsed,
+                                                          timeout_sec))
 
 
 class EucaISConnection(object):
