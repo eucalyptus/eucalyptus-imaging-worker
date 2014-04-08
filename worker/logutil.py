@@ -26,7 +26,7 @@ from logging.handlers import SysLogHandler
 # import boto and keep us from initializing the boto logger.
 #
 LOG_FILE = '/var/log/eucalyptus-imaging-worker/worker.log'
-LOG_BYTES = 1024 * 1024 # 1MB
+LOG_BYTES = 1024 * 1024  # 1MB
 
 log = logging.getLogger('worker')
 botolog = logging.getLogger('boto')
@@ -41,7 +41,8 @@ botolog.addHandler(file_log_handler)
 # remote handler
 if config.get_log_server() != None and config.get_log_server_port() != None:
     remote_formatter = logging.Formatter('imaging-worker ' + config.get_worker_id() + ' [%(levelname)s]:%(message)s')
-    remote_log_handler = SysLogHandler(address=(config.get_log_server(), config.get_log_server_port()), facility=SysLogHandler.LOG_DAEMON)
+    remote_log_handler = SysLogHandler(address=(config.get_log_server(), config.get_log_server_port()),
+                                       facility=SysLogHandler.LOG_DAEMON)
     remote_log_handler.setFormatter(remote_formatter)
     log.addHandler(remote_log_handler)
 

@@ -32,36 +32,40 @@ from lxml import objectify
 import worker
 import worker.config as config
 
+
 def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaEuareConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                                aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                                **kwargs)
 
+
 def connect_imaging_worker(host_name=None, port=80, path="services/Imaging", aws_access_key_id=None,
-                  aws_secret_access_key=None, security_token=None, **kwargs):
+                           aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaISConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
-                               aws_secret_access_key=aws_secret_access_key, security_token=security_token,
-                               **kwargs)
+                            aws_secret_access_key=aws_secret_access_key, security_token=security_token,
+                            **kwargs)
+
 
 def connect_ec2(host_name=None, port=80, path="services/Eucalyptus", aws_access_key_id=None,
-                  aws_secret_access_key=None, security_token=None, **kwargs):
+                aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaEC2Connection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
-                               aws_secret_access_key=aws_secret_access_key, security_token=security_token,
-                               **kwargs)
+                             aws_secret_access_key=aws_secret_access_key, security_token=security_token,
+                             **kwargs)
+
 
 class EucaEC2Connection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Eucalyptus',
                  security_token=None, validate_certs=False, port=80):
-        region=RegionInfo(name='eucalyptus', endpoint=host_name)
-        self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id, 
-                                aws_secret_access_key=aws_secret_access_key, port=port, 
-                                path=path, security_token=security_token, is_secure=is_secure,
-                                validate_certs=validate_certs)
-        self.conn.APIVersion = '2013-08-15' #TODO: set new version?
+        region = RegionInfo(name='eucalyptus', endpoint=host_name)
+        self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
+                                  aws_secret_access_key=aws_secret_access_key, port=port,
+                                  path=path, security_token=security_token, is_secure=is_secure,
+                                  validate_certs=validate_certs)
+        self.conn.APIVersion = '2013-08-15'  #TODO: set new version?
         self.conn.http_connection_kwargs['timeout'] = 30
-    
+
     def attach_volume(self, volume_id, instance_id, device_name):
         return self.conn.attach_volume(volume_id, instance_id, device_name)
 
@@ -73,16 +77,16 @@ class EucaEC2Connection(object):
 
     def describe_volume(self, volume_id=None):
         if volume_id == None:
-           raise RuntimeError("There is no volume_id provoded")
+            raise RuntimeError("There is no volume_id provoded")
         res = self.describe_volumes([volume_id, 'verbose'])
         if len(res) != 1:
-           raise RuntimeError("Can't describe volume %s" % volume_id)
+            raise RuntimeError("Can't describe volume %s" % volume_id)
         else:
-           vol = res[0]
-           if vol.status == 'in-use':
-               return {'status': vol.attachment_state(), 'instance_id': vol.attach_data.instance_id }
-           else:
-               return {'status': vol.status}
+            vol = res[0]
+            if vol.status == 'in-use':
+                return {'status': vol.attachment_state(), 'instance_id': vol.attach_data.instance_id}
+            else:
+                return {'status': vol.status}
 
     def detach_volume_and_wait(self, volume_id, timeout_sec=3000):
         if not self.conn.detach_volume(volume_id):
@@ -106,33 +110,36 @@ class EucaEC2Connection(object):
         vol = self.describe_volume(volume_id)
         return vol['status'] == 'attached' and vol['instance_id'] == instance_id
 
+
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Imaging',
                  security_token=None, validate_certs=False, port=80):
-        region=RegionInfo(name='eucalyptus', endpoint=host_name)
+        region = RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
-                                aws_secret_access_key=aws_secret_access_key, port=port, 
-                                path=path, security_token=security_token, is_secure=is_secure,
-                                validate_certs=validate_certs)
-        self.conn.APIVersion = '2014-02-14' #TODO: set new version?
+                                  aws_secret_access_key=aws_secret_access_key, port=port,
+                                  path=path, security_token=security_token, is_secure=is_secure,
+                                  validate_certs=validate_certs)
+        self.conn.APIVersion = '2014-02-14'  #TODO: set new version?
         self.conn.http_connection_kwargs['timeout'] = 30
 
     def get_import_task(self):
-        params = {'InstanceId':config.get_worker_id()}
+        params = {'InstanceId': config.get_worker_id()}
         task = self.conn.get_object('GetInstanceImportTask', params, InstanceImportTask, verb='POST')
-        if not task or not task.task_id :
+        if not task or not task.task_id:
             return None
         else:
             return task
+
     """
     Communicates conversion status to the server
     Returns True if task should be canceled
     """
+
     def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None):
-        if task_id==None or status==None:
+        if task_id == None or status == None:
             raise RuntimeError("Invalid parameters")
-        params = {'InstanceId':config.get_worker_id(), 'ImportTaskId':task_id, 'Status': status}
+        params = {'InstanceId': config.get_worker_id(), 'ImportTaskId': task_id, 'Status': status}
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
         if volume_id != None:
@@ -143,28 +150,29 @@ class EucaISConnection(object):
         root = objectify.XML(resp.read())
         return 'true' == root.cancelled.text if hasattr(root, 'cancelled') else False
 
+
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  is_secure=False, port=None, proxy=None, proxy_port=None,
-                 proxy_user=None, proxy_pass=None, host_name=None, debug=0, 
+                 proxy_user=None, proxy_pass=None, host_name=None, debug=0,
                  https_connection_factory=None, path='/', security_token=None, validate_certs=True):
         """
         Euca-specific extension to boto's IAM connection. 
         """
         IAMConnection.__init__(self, aws_access_key_id,
-                            aws_secret_access_key,
-                            is_secure, port, proxy,
-                            proxy_port, proxy_user, proxy_pass,
-                            host_name, debug, https_connection_factory,
-                            path, security_token,
-                            validate_certs=validate_certs)
+                               aws_secret_access_key,
+                               is_secure, port, proxy,
+                               proxy_port, proxy_user, proxy_pass,
+                               host_name, debug, https_connection_factory,
+                               path, security_token,
+                               validate_certs=validate_certs)
 
     def download_cloud_certificate(self):
         resp = self.get_response('DownloadCloudCertificate', {})
-        result = resp['euca:_download_cloud_certificate_response_type']['euca:download_cloud_certificate_result'] 
+        result = resp['euca:_download_cloud_certificate_response_type']['euca:download_cloud_certificate_result']
         if not result:
             raise Exception('No certificate is found in the response')
-        cert_b64= result['euca:cloud_certificate']
+        cert_b64 = result['euca:cloud_certificate']
         if not cert_b64:
             raise Exception('No certificate is found in the response')
         return cert_b64.decode('base64')
@@ -185,19 +193,19 @@ class EucaEuareConnection(IAMConnection):
  
         """
         timestamp = boto.utils.get_ts()
-        msg= cert_arn+"&"+timestamp
+        msg = cert_arn + "&" + timestamp
         rsa = M2Crypto.RSA.load_key_string(pk)
         msg_digest = M2Crypto.EVP.MessageDigest('sha256')
         msg_digest.update(msg)
-        sig = rsa.sign(msg_digest.digest(),'sha256')
+        sig = rsa.sign(msg_digest.digest(), 'sha256')
         sig = sig.encode('base64')
         cert = cert.encode('base64')
 
         params = {'CertificateArn': cert_arn,
                   'DelegationCertificate': cert,
-                  'AuthSignature':auth_signature,
-                  'Timestamp':timestamp,
-                  'Signature':sig} 
+                  'AuthSignature': auth_signature,
+                  'Timestamp': timestamp,
+                  'Signature': sig}
         resp = self.get_response('DownloadServerCertificate', params)
         result = resp['euca:_download_server_certificate_response_type']['euca:download_server_certificate_result']
         if not result:
@@ -205,26 +213,26 @@ class EucaEuareConnection(IAMConnection):
         sig = result['euca:signature']
         arn = result['euca:certificate_arn']
         server_cert = result['euca:server_certificate']
-        server_pk = result['euca:server_pk'] 
-   
+        server_pk = result['euca:server_pk']
+
         if arn != cert_arn:
             raise Exception("certificate ARN in the response is not valid")
-        sig_payload=str(server_cert)+'&'+str(server_pk)
+        sig_payload = str(server_cert) + '&' + str(server_pk)
         sig = str(sig)
         # verify the signature to ensure the response came from EUARE
         cert = M2Crypto.X509.load_cert_string(euare_cert)
         verify_rsa = cert.get_pubkey().get_rsa()
         msg_digest = M2Crypto.EVP.MessageDigest('sha256')
         msg_digest.update(sig_payload)
-        if verify_rsa.verify(msg_digest.digest(), sig.decode('base64'), 'sha256') != 1 :
+        if verify_rsa.verify(msg_digest.digest(), sig.decode('base64'), 'sha256') != 1:
             raise Exception("invalid signature from EUARE")
 
         # prep symmetric keys
         parts = server_pk.split("\n")
-        if(len(parts) != 2):
+        if (len(parts) != 2):
             raise Exception("invalid format of server private key")
         symm_key = parts[0]
-        cipher = parts[1] 
+        cipher = parts[1]
         try:
             raw_symm_key = rsa.private_decrypt(symm_key.decode('base64'), M2Crypto.RSA.pkcs1_padding)
         except Exception, err:
@@ -236,12 +244,12 @@ class EucaEuareConnection(IAMConnection):
             cipher_text = cipher[16:]
 
             # decrypt the pk
-            cipher = M2Crypto.EVP.Cipher("aes_256_cbc", raw_symm_key , iv, op = 0, padding=0)
+            cipher = M2Crypto.EVP.Cipher("aes_256_cbc", raw_symm_key, iv, op=0, padding=0)
             txt = cipher.update(cipher_text)
             txt = txt + cipher.final()
             s_cert = ServerCertificate(server_cert.decode('base64'), txt.decode('base64'))
         except Exception, err:
-            raise Exception("failed to decrypt the private key: " + str(err)) 
+            raise Exception("failed to decrypt the private key: " + str(err))
 
         return s_cert
 

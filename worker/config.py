@@ -26,15 +26,17 @@ CONF_ROOT = "/etc/eucalyptus-imaging-worker"
 RUN_ROOT = "/var/lib/eucalyptus-imaging-worker"
 SUDO_BIN = "/usr/bin/sudo"
 
-FLOPPY_MOUNT_DIR = RUN_ROOT+"/floppy"
+FLOPPY_MOUNT_DIR = RUN_ROOT + "/floppy"
 
 # Apply default values in case user does not specify
 pidfile = DEFAULT_PIDFILE
 pidroot = DEFAULT_PID_ROOT
 boto_config = None
 cred_provider = None
-user_data_store={}
+user_data_store = {}
 QUERY_PERIOD_SEC = 30
+
+
 def get_provider():
     global boto_config
     global cred_provider
@@ -44,11 +46,13 @@ def get_provider():
         cred_provider = boto.provider.get_default()
     return cred_provider
 
+
 def set_boto_config(filename):
     if not os.path.isfile(filename):
         raise Exception('could not find boto config {0}'.format(filename))
     global boto_config
     boto_config = filename
+
 
 # Update pidfile and pidroot variables in global scope.
 # This is called if the user has chosen to use a custom
@@ -59,19 +63,21 @@ def set_pidfile(filename):
     pidfile = filename
     pidroot = os.path.dirname(pidfile)
 
+
 def query_user_data():
     resp, content = httplib2.Http().request("http://169.254.169.254/latest/user-data")
     if resp['status'] != '200' or len(content) <= 0:
         raise Exception('could not query the userdata')
     #remove extra euca-.... line
     lines = content.split('\n')
-    content = lines[len(lines)-1]
+    content = lines[len(lines) - 1]
     #format of userdata = "key1=value1;key2=value2;..."
     kvlist = content.split(';')
     for word in kvlist:
         kv = word.split('=')
         if len(kv) == 2:
-            user_data_store[kv[0]]=kv[1] 
+            user_data_store[kv[0]] = kv[1]
+
 
 def get_value(key, optional=False):
     if key in user_data_store:
@@ -82,39 +88,51 @@ def get_value(key, optional=False):
             raise Exception('could not find %s' % key)
         return None if optional else user_data_store[key]
 
-def get_access_key_id(): 
+
+def get_access_key_id():
     akey = get_provider().get_access_key()
     return akey
+
 
 def get_secret_access_key():
     skey = get_provider().get_secret_key()
     return skey
 
+
 def get_security_token():
     token = get_provider().get_security_token()
     return token
 
+
 def get_clc_host():
     return '169.254.169.254'
 
+
 def get_clc_port():
-    val=get_value('eucalyptus_port')
+    val = get_value('eucalyptus_port')
     return int(val) if val is not None else None
+
 
 def get_ec2_path():
     return get_value('ec2_path')
 
+
 def get_imaging_path():
     return get_value('imaging_path')
+
 
 def get_log_server():
     return get_value('log_server', optional=True)
 
+
 def get_log_server_port():
-    val=get_value('log_server_port', optional=True)
+    val = get_value('log_server_port', optional=True)
     return int(val) if val is not None else None
 
+
 __availability_zone = None
+
+
 def get_availability_zone():
     global __availability_zone
     if __availability_zone is None:
@@ -124,9 +142,12 @@ def get_availability_zone():
         __availability_zone = content
     return __availability_zone
 
+
 __worker_id = None
+
+
 def get_worker_id():
-    global __worker_id 
+    global __worker_id
     if __worker_id is None:
         resp, content = httplib2.Http().request("http://169.254.169.254/latest/meta-data/instance-id")
         if resp['status'] != '200' or len(content) <= 0:

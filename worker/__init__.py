@@ -31,16 +31,19 @@ import os
 __version__ = '1.0.0-dev'
 Version = __version__
 
+
 def get_block_devices():
-    retlist=[]
+    retlist = []
     for filename in os.listdir('/dev'):
         if any(filename.startswith(prefix) for prefix in ('sd', 'xvd', 'vd', 'xd')):
             retlist.append('/dev/' + filename)
     retlist.sort(reverse=True)
     return retlist
 
+
 def run_as_sudo(cmd):
     return subprocess.call('sudo %s' % cmd, shell=True)
+
 
 def start_worker():
     if run_as_sudo('modprobe floppy > /dev/null') != 0:
@@ -48,15 +51,18 @@ def start_worker():
     try:
         last_dev = get_block_devices()[0]
         worker.config.get_worker_id()
-        if subprocess.call('ls -la %s > /dev/null' % last_dev, shell=True) != 0 or subprocess.call('ls -la /mnt > /dev/null', shell=True) != 0:
+        if subprocess.call('ls -la %s > /dev/null' % last_dev, shell=True) != 0 or subprocess.call(
+                'ls -la /mnt > /dev/null', shell=True) != 0:
             log.error('failed to find %s or /mnt' % last_dev)
         else:
             if run_as_sudo('mount | grep /mnt > /dev/null') == 1:
-                if run_as_sudo('mkfs.ext3 %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo('mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
+                if run_as_sudo('mkfs.ext3 %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo(
+                                'mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
                     log.error('failed to format and mount %s ' % last_dev)
                 else:
                     log.info('%s was successfully formatted and mounted to /mnt' % last_dev)
-                    if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo('chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
+                    if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
+                            'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
                         log.error('could not create /mnt/imaging')
             else:
                 log.info('%s is alredy mounted to /mnt' % last_dev)
