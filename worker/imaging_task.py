@@ -199,7 +199,7 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--signing-key-path=' + self.service_key_path,
                       '--prefix=' + self.prefix,
                       '--bucket=' + self.bucket,
-                      '--work-dir=/mnt',
+                      '--work-dir=/mnt/imaging',
                       '--arch=' + self.architecture,
                       '--account=' + self.owner_account_id,
                       '--access-key=' + self.owner_access_key,
