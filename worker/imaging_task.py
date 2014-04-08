@@ -25,10 +25,26 @@ import worker
 import subprocess
 import httplib2
 import base64
+import threading
 from lxml import objectify
 from worker.ws import EucaEC2Connection
 from worker.ws import EucaISConnection
 import worker.ssl
+
+
+class ReportThread (threading.Thread):
+    def __init__(self,function):
+        threading.Thread.__init__(self)
+        self.exit_flag = False
+        self.function = function
+
+    def run(self):
+        while not self.exit_flag:
+            self.function()
+            time.sleep(10)
+
+    def stop(self):
+        self.exit_flag = True
 
 
 class ImagingTask(object):
@@ -57,7 +73,6 @@ class ImagingTask(object):
         else:
             self.report_failed()
             return False
-
 
     def report_running(self, volume_id=None, bytes_transferred=None):
         return self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, volume_id, bytes_transferred)
@@ -137,9 +152,9 @@ class ImagingTask(object):
             try:
                 res = json.loads(output)
                 bytes_transferred = res['status']['bytes_downloaded']
-            except Exception:
-                worker.log.warn("Downloadimage subprocess reports invalid status")
-            worker.log.debug("Status %s, %d" % (output, self.bytes_transferred))
+            except Exception, ex:
+                worker.log.warn("Download image subprocess reports invalid status. Error: %s" % ex)
+            worker.log.debug("Status %s, bytes transferred: %d" % (output, bytes_transferred))
             if self.report_running(self.volume_id if type(self) is VolumeImagingTask else None, bytes_transferred):
                 worker.log.info('Conversion task %s was canceled by server' % self.task_id)
                 process.kill()
@@ -229,8 +244,10 @@ class InstanceStoreImagingTask(ImagingTask):
             # added for debug TODO: remove later
             out = open("/tmp/stdout.txt", "wb")
             err = open("/tmp/stderr.txt", "wb")
-            # Just call 'call' for now. TODO:add some status pushing to server
+            report_thread = ReportThread(self.report_running)
+            report_thread.start()
             process = subprocess.call(params, stderr=err, stdout=out)
+            report_thread.stop()
             out.close()
             err.close()
         except Exception, err:
@@ -298,7 +315,7 @@ class VolumeImagingTask(ImagingTask):
         worker.log.debug('attaching volume {0} to {1} as {2}'.format(self.volume_id, instance_id, device_name))
         if not self.ec2_conn.attach_volume_and_wait(self.volume_id, instance_id, device_name):
             raise RuntimeError('Can not attach volume {0} to the instance {1}'.format(
-                self.volume_id, instance_id))  #todo: add specific error?
+                self.volume_id, instance_id))
         new_block_devices = self.get_block_devices()
         new_device_name = new_block_devices[0]  # can it be different from device_name?
         return new_device_name
@@ -319,7 +336,7 @@ class VolumeImagingTask(ImagingTask):
             return None
 
     def detach_volume(self):
-        if self.volume_id == None:
+        if self.volume_id is None:
             raise RuntimeError('This import does not have volume id')
         worker.log.debug('detaching volume {0}'.format(self.volume_id))
         devices_before = self.get_block_devices()
@@ -333,7 +350,7 @@ class VolumeImagingTask(ImagingTask):
     def run_download_to_volume(self, device_to_use):
         # download image to the block device and monitor process
         process = self.download_data(self.manifest_url, device_to_use)
-        if process != None:
+        if process is not None:
             self.wait_with_status(process)
 
     def run_task(self):
@@ -342,15 +359,17 @@ class VolumeImagingTask(ImagingTask):
             device_to_use = None
             manifest = self.get_manifest()
             image_size = int(manifest.image.size)
-            if self.volume_id != None:
+            if self.volume_id is not None:
                 worker.log.info('Attaching volume %s' % self.volume_id)
+                report_thread = ReportThread(self.report_running)
+                report_thread.start()
                 device_to_use = self.attach_volume()
+                report_thread.stop()
                 worker.log.debug('Using %s as destination' % device_to_use)
                 device_size = self.get_partition_size(device_to_use)
                 worker.log.debug('Attached device size is %d bytes' % device_size)
                 worker.log.debug('Needed for image/volume %d bytes' % image_size)
                 if image_size > device_size:
-                    self.image_size = 0
                     raise Exception('Device is too small for the image/volume')
                 try:
                     self.add_write_permission(device_to_use)
@@ -370,6 +389,9 @@ class VolumeImagingTask(ImagingTask):
             worker.log.error('Failed to process task: %s' % err)
         finally:
             # detaching volume
-            if device_to_use != None:
+            if device_to_use is not None:
                 worker.log.info('Detaching volume %s' % self.volume_id)
+                report_thread = ReportThread(self.report_running)
+                report_thread.start()
                 self.detach_volume()
+                report_thread.stop()
