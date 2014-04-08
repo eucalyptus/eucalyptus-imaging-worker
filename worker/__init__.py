@@ -25,12 +25,11 @@ from worker.config import set_pidfile, set_boto_config
 from worker.main_loop import WorkerLoop
 import worker.config as config
 import worker
-import subprocess
-<<<<<<< HEAD
-import sys
-=======
 import os
->>>>>>> 6d30a2a0a1afb82390cbd601f2ba7588179a2194
+import subprocess
+import sys
+
+
 
 __version__ = '1.0.0-dev'
 Version = __version__
