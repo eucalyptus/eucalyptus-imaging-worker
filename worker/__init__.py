@@ -28,7 +28,7 @@ import worker
 import os
 import subprocess
 import sys
-
+import re
 
 
 __version__ = '1.0.0-dev'
@@ -36,12 +36,13 @@ Version = __version__
 
 
 def get_block_devices():
-    retlist = []
+    ret_list = []
     for filename in os.listdir('/dev'):
         if any(filename.startswith(prefix) for prefix in ('sd', 'xvd', 'vd', 'xd')):
-            retlist.append('/dev/' + filename)
-    retlist.sort(reverse=True)
-    return retlist
+            filename = re.sub('\d', '', filename)
+            if not '/dev/'+filename in ret_list:
+                ret_list.append('/dev/' + filename)
+    return ret_list
 
 
 def run_as_sudo(cmd):
@@ -52,7 +53,9 @@ def start_worker():
     if run_as_sudo('modprobe floppy > /dev/null') != 0:
         log.error('failed to load floppy driver')
     try:
-        last_dev = get_block_devices()[0]
+        res = get_block_devices()
+        res.sort(reverse=True)
+        last_dev = res[0]
         worker.config.get_worker_id()
         if subprocess.call('ls -la %s > /dev/null' % last_dev, shell=True) != 0 or subprocess.call(
                 'ls -la /mnt > /dev/null', shell=True) != 0:

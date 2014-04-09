@@ -19,7 +19,6 @@ import tempfile
 import time
 import json
 import os
-import re
 import requests
 import string
 import config
@@ -288,15 +287,6 @@ class VolumeImagingTask(ImagingTask):
         return ('Task: {0}, manifest url: {1}, volume id: {2}'
                 .format(self.task_id, self.manifest_url,self.volume.id))
 
-    def get_block_devices(self):
-        retlist = []
-        for filename in os.listdir('/dev'):
-            if any(filename.startswith(prefix) for prefix in ('sd', 'xvd', 'vd', 'xd')):
-                filename = re.sub('\d', '', filename)
-                if not '/dev/'+filename in retlist:
-                    retlist.append('/dev/' + filename)
-        return retlist
-
     def get_partition_size(self, partition):
         p = subprocess.Popen(["sudo", "blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
         t = p.communicate()[0]
@@ -364,7 +354,7 @@ class VolumeImagingTask(ImagingTask):
         if not self.volume:
             raise RuntimeError('This import does not have a volume')
         instance_id = self.instance_id
-        devices_before = self.get_block_devices()
+        devices_before = worker.get_block_devices()
         device_name = self.next_device_name(devices_before)
         worker.log.info('attaching volume {0} to {1} as {2}'.
                         format(self.volume.id, instance_id, device_name))
@@ -374,7 +364,7 @@ class VolumeImagingTask(ImagingTask):
         elapsed = 0
         start = time.time()
         while elapsed < local_dev_timeout and not new_device_name:
-            new_block_devices = self.get_block_devices()
+            new_block_devices = worker.get_block_devices()
             worker.log.info('Waiting for local dev for volume: "{0}", '
                             'elapsed:{1}'.format(self.volume.id, elapsed))
             diff_list = list(set(new_block_devices) - set(devices_before))
@@ -449,7 +439,7 @@ class VolumeImagingTask(ImagingTask):
         if self.volume == None:
             raise RuntimeError('This import does not have volume id')
         worker.log.debug('detaching volume {0}'.format(self.volume.id))
-        devices_before = self.get_block_devices()
+        devices_before = worker.get_block_devices()
         self.volume.update()
         # Do not attempt to detach a volume which is not attached/attaching, or
         # is not attached to this instance
@@ -472,7 +462,7 @@ class VolumeImagingTask(ImagingTask):
             start=time.time()
             devices_after = devices_before
             while elapsed < local_dev_timeout:
-                new_block_devices = self.get_block_devices()
+                new_block_devices = worker.get_block_devices()
                 devices_after = list(set(devices_before) - set(new_block_devices))
                 if not self.volume_attached_dev in devices_after:
                     break
