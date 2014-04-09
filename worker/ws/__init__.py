@@ -111,8 +111,7 @@ class EucaEC2Connection(object):
         while elapsed < timeout_sec:
             vol.update()
             if vol.status == 'available' or vol.status.startswith('delet'):
-                worker.log.info('detach_volume_and_wait volume status: "{0}"'
-                                .format(vol.status))
+                worker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status)
                 return
             time.sleep(5)
             elapsed = time.time() - start
@@ -122,7 +121,7 @@ class EucaEC2Connection(object):
             instance = str(vol.attach_data.instance_id)
         raise RuntimeError('Volume:"{0}" failed to detach from:"{1}". '
                            'Status:"{2}", elapsed: {3}/{4}'
-                           .format(vol.id, vol.status, elapsed, timeout_sec))
+                           .format(vol.id, instance, vol.status, elapsed, timeout_sec))
 
     def attach_volume_and_wait(self,
                                volume_id,
