@@ -21,7 +21,6 @@ import json
 import os
 import re
 import requests
-import string
 import config
 import worker
 import subprocess
@@ -30,8 +29,6 @@ import httplib2
 import base64
 import threading
 from lxml import objectify
-from worker.ws import EucaEC2Connection
-from worker.ws import EucaISConnection
 import worker.ssl
 
 
