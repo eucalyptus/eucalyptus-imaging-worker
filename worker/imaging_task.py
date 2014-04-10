@@ -32,8 +32,8 @@ from lxml import objectify
 import worker.ssl
 
 
-class ReportThread (threading.Thread):
-    def __init__(self,function):
+class ReportThread(threading.Thread):
+    def __init__(self, function):
         threading.Thread.__init__(self)
         self.exit_flag = False
         self.function = function
@@ -133,7 +133,7 @@ class ImagingTask(object):
             service_key_path = '%s/node-pk.pem' % config.RUN_ROOT
             service_cert_path = '%s/node-cert.pem' % config.RUN_ROOT
             cert_arn = str(task.service_cert_arn)
-            cert = worker.ssl.download_server_certificate(cert_arn)
+            cert = worker.ssl.download_server_certificate(cert_arn, task_id=import_task.task_id)
             worker.ssl.write_certificate(service_key_path, cert.get_private_key())
             worker.ssl.write_certificate(service_cert_path, cert.get_certificate())
             task = InstanceStoreImagingTask(import_task.task_id, bucket=bucket, prefix=prefix,
@@ -153,10 +153,10 @@ class ImagingTask(object):
                 res = json.loads(output)
                 bytes_transferred = res['status']['bytes_downloaded']
             except Exception, ex:
-                worker.log.warn("Download image subprocess reports invalid status. Error: %s" % ex)
-            worker.log.debug("Status %s, bytes transferred: %d" % (output, bytes_transferred))
+                worker.log.warn("Download image subprocess reports invalid status. Error: %s" % ex, self.task_id)
+            worker.log.debug("Status %s, bytes transferred: %d" % (output, bytes_transferred), self.task_id)
             if self.report_running(self.volume_id if type(self) is VolumeImagingTask else None, bytes_transferred):
-                worker.log.info('Conversion task %s was canceled by server' % self.task_id)
+                worker.log.info('Conversion task %s was canceled by server' % self.task_id, self.task_id)
                 process.kill()
             else:
                 time.sleep(10)
@@ -194,7 +194,7 @@ class InstanceStoreImagingTask(ImagingTask):
         for manifest in self.import_images:
             manifest_str = manifest_str + '\n' + str(manifest)
         return 'instance-store conversion task - id: %s, bucket: %s, prefix: %s, manifests: %s' % (
-        self.task_id, self.bucket, self.prefix, manifest_str)
+            self.task_id, self.bucket, self.prefix, manifest_str)
 
     def get_image(self, val):
         for image in self.import_images:
@@ -240,7 +240,7 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--upload-policy=' + self.s3_upload_policy,
                       '--upload-policy-signature=' + self.s3_upload_policy_signature,
                       '--cloud-cert-path=' + self.cloud_cert_path]
-            worker.log.debug('Running %s', ' '.join(params))
+            worker.log.debug('Running %s', ' '.join(params), self.task_id)
             # added for debug TODO: remove later
             out = open("/tmp/stdout.txt", "wb")
             err = open("/tmp/stderr.txt", "wb")
@@ -251,13 +251,14 @@ class InstanceStoreImagingTask(ImagingTask):
             out.close()
             err.close()
         except Exception, err:
-            worker.log.error('Failed to process task: %s' % err)
+            worker.log.error('Failed to process task: %s' % err, self.task_id)
             return False
         return True
 
 
 class VolumeImagingTask(ImagingTask):
     _GIG_ = 1073741824
+
     def __init__(self, task_id, manifest_url=None, volume_id=None):
         ImagingTask.__init__(self, task_id, "import_volume")
         self.manifest_url = manifest_url
@@ -283,12 +284,12 @@ class VolumeImagingTask(ImagingTask):
 
     def __str__(self):
         return ('Task: {0}, manifest url: {1}, volume id: {2}'
-                .format(self.task_id, self.manifest_url,self.volume.id))
+                .format(self.task_id, self.manifest_url, self.volume.id))
 
     def get_partition_size(self, partition):
         p = subprocess.Popen(["sudo", "blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
         t = p.communicate()[0]
-        worker.log.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition))
+        worker.log.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition), self.task_id)
         return int(t.rstrip('\n'))
 
     def add_write_permission(self, partition):
@@ -314,18 +315,18 @@ class VolumeImagingTask(ImagingTask):
 
         block_device_mapping = self._get_block_device_mapping_metadata()
         # iterate through local devices as well as cloud block device mapping
-        for x in xrange(ord(last_char)+1, ord('z')):
-            next_device = device_prefix+chr(x)
+        for x in xrange(ord(last_char) + 1, ord('z')):
+            next_device = device_prefix + chr(x)
             if (not next_device in all_dev) and \
-                (not next_device in block_device_mapping) and \
-                (not os.path.basename(next_device) in block_device_mapping):
+                    (not next_device in block_device_mapping) and \
+                    (not os.path.basename(next_device) in block_device_mapping):
                 # Device is not in use locally or in block dev map
                 return next_device
         # if a free device was found increment device name and re-enter
         return self.next_device_name(device_prefix + "aa")
 
     def _get_metadata(self, path, basepath='http://169.254.169.254/'):
-        for x in xrange(0,3):
+        for x in xrange(0, 3):
             try:
                 r = requests.get(os.path.join(basepath, path.lstrip('/')))
                 r.raise_for_status()
@@ -354,8 +355,8 @@ class VolumeImagingTask(ImagingTask):
         instance_id = self.instance_id
         devices_before = worker.get_block_devices()
         device_name = self.next_device_name(devices_before)
-        worker.log.info('attaching volume {0} to {1} as {2}'.
-                        format(self.volume.id, instance_id, device_name))
+        worker.log.debug('Attaching volume {0} to {1} as {2}'.
+                         format(self.volume.id, instance_id, device_name), self.task_id)
         self.ec2_conn.attach_volume_and_wait(self.volume.id,
                                              instance_id,
                                              device_name)
@@ -363,8 +364,8 @@ class VolumeImagingTask(ImagingTask):
         start = time.time()
         while elapsed < local_dev_timeout and not new_device_name:
             new_block_devices = worker.get_block_devices()
-            worker.log.info('Waiting for local dev for volume: "{0}", '
-                            'elapsed:{1}'.format(self.volume.id, elapsed))
+            worker.log.debug('Waiting for local dev for volume: "{0}", '
+                             'elapsed:{1}'.format(self.volume.id, elapsed), self.task_id)
             diff_list = list(set(new_block_devices) - set(devices_before))
             if diff_list:
                 for dev in diff_list:
@@ -405,13 +406,13 @@ class VolumeImagingTask(ImagingTask):
             serialpath = os.path.join(syspath + devdir + '/serial')
             if os.path.isfile(serialpath):
                 with open(serialpath) as devfile:
-                        serial=devfile.read()
+                    serial = devfile.read()
                 if serial.startswith(volume_id):
-                        break
+                    break
         if os.path.basename(blockdev) == devdir:
-            worker.log.debug('validated volume:"{0}" at dev:"{1}" '
+            worker.log.debug('Validated volume:"{0}" at dev:"{1}" '
                              'via serial number: '
-                             .format(volume_id, blockdev))
+                             .format(volume_id, blockdev), self.task_id)
             return
         else:
             raise ValueError('Device for volume: {0} could not be verfied'
@@ -426,17 +427,16 @@ class VolumeImagingTask(ImagingTask):
                       '--import-manifest-url', manifest,
                       '--output-path', device_name,
                       '--cloud-cert-path', cloud_cert_path]
-            worker.log.debug('Running %s', ' '.join(params))
+            worker.log.debug('Running %s', ' '.join(params), self.task_id)
             return subprocess.Popen(params, stderr=subprocess.PIPE)
         except Exception, err:
-            worker.log.error('Could not start data download: %s' % err)
+            worker.log.error('Could not start data download: %s' % err, self.task_id)
             return None
 
     def detach_volume(self, timeout_sec=3000, local_dev_timeout=30):
-        worker.log.info('Detaching volume %s' % self.volume.id)
-        if self.volume == None:
+        worker.log.debug('Detaching volume %s' % self.volume.id, self.task_id)
+        if self.volume is None:
             raise RuntimeError('This import does not have volume id')
-        worker.log.debug('detaching volume {0}'.format(self.volume.id))
         devices_before = worker.get_block_devices()
         self.volume.update()
         # Do not attempt to detach a volume which is not attached/attaching, or
@@ -444,20 +444,19 @@ class VolumeImagingTask(ImagingTask):
         this_instance_id = config.get_worker_id()
         attached_state = self.volume.attachment_state()
         if not attached_state \
-            or not attached_state.startswith('attach') \
-            or (hasattr(self.volume,'attach_data')
-                and self.volume.attach_data.instance_id != this_instance_id):
-                self.volume_attached_dev = None
-                return True
+                or not attached_state.startswith('attach') \
+                or (hasattr(self.volume, 'attach_data')
+                    and self.volume.attach_data.instance_id != this_instance_id):
+            self.volume_attached_dev = None
+            return True
         # Begin detaching from this instance
-        if not self.ec2_conn.detach_volume_and_wait(self.volume.id,
-                                                    timeout_sec=timeout_sec):
-            raise RuntimeError('Can not dettach volume {0}'
-                               .format(self.volume.id)) #todo: add specific error?
+        if not self.ec2_conn.detach_volume_and_wait(self.volume.id, timeout_sec=timeout_sec, task_id=self.task_id):
+            raise RuntimeError('Can not detach volume {0}'
+                               .format(self.volume.id))  #todo: add specific error?
         # If the attached dev is known, verify it is no longer present.
         if self.volume_attached_dev:
             elapsed = 0
-            start=time.time()
+            start = time.time()
             devices_after = devices_before
             while elapsed < local_dev_timeout:
                 new_block_devices = worker.get_block_devices()
@@ -473,9 +472,9 @@ class VolumeImagingTask(ImagingTask):
                 worker.log.error('Volume:"{0}" state:"{1}". Local device:"{2}"'
                                  'found on guest after {3} seconds'
                                  .format(self.volume.id,
-                                 self.volume.status,
-                                 self.volume.local_blockdev,
-                                 timeout_sec))
+                                         self.volume.status,
+                                         self.volume.local_blockdev,
+                                         timeout_sec), self.task_id)
         return True
 
     def run_download_to_volume(self, device_to_use):
@@ -490,22 +489,22 @@ class VolumeImagingTask(ImagingTask):
             device_to_use = None
             manifest = self.get_manifest()
             image_size = int(manifest.image.size)
-            if self.volume != None:
+            if self.volume is not None:
                 if long(int(self.volume.size) * self._GIG_) < image_size:
                     raise ValueError('Volume:"{1}" size:"{1}" is too small '
                                      'for image to be processed:"{2}"'
                                      .format(self.volume.id,
                                              self.volume.size,
                                              image_size))
-                worker.log.info('Attaching volume %s' % self.volume.id)
+                worker.log.info('Attaching volume %s' % self.volume.id, self.task_id)
                 report_thread = ReportThread(self.report_running)
                 report_thread.start()
                 device_to_use = self.attach_volume()
                 report_thread.stop()
-                worker.log.debug('Using %s as destination' % device_to_use)
+                worker.log.debug('Using %s as destination' % device_to_use, self.task_id)
                 device_size = self.get_partition_size(device_to_use)
-                worker.log.debug('Attached device size is %d bytes' % device_size)
-                worker.log.debug('Needed for image/volume %d bytes' % image_size)
+                worker.log.debug('Attached device size is %d bytes' % device_size, self.task_id)
+                worker.log.debug('Needed for image/volume %d bytes' % image_size, self.task_id)
                 if image_size > device_size:
                     raise Exception('Device is too small for the image/volume')
                 try:
@@ -524,17 +523,17 @@ class VolumeImagingTask(ImagingTask):
                 return True
         except Exception, err:
             tb = traceback.format_exc()
-            worker.log.error(str(tb) + '\nFailed to process task: %s' % err)
+            worker.log.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
         finally:
             # detaching volume
             if device_to_use is not None:
-                worker.log.info('Detaching volume %s' % self.volume_id)
+                worker.log.info('Detaching volume %s' % self.volume_id, self.task_id)
                 report_thread = ReportThread(self.report_running)
                 report_thread.start()
                 try:
                     if self.volume_id:
                         self.ec2_conn.detach_volume_and_wait(
-                            volume_id=self.volume_id)
+                            volume_id=self.volume_id, task_id=self.task_id)
                 finally:
                     report_thread.stop()
 

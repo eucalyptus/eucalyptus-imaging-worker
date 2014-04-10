@@ -20,7 +20,7 @@
 # Order matters here. We want to make sure we initialize logging before anything
 # else happens. We need to initialize the logger that boto will be using.
 #
-from worker.logutil import log, set_loglevel
+from worker.logutil import CustomLog, set_loglevel
 from worker.config import set_pidfile, set_boto_config
 from worker.main_loop import WorkerLoop
 import worker.config as config
@@ -33,6 +33,7 @@ import re
 
 __version__ = '1.0.0-dev'
 Version = __version__
+log = CustomLog()
 
 
 def get_block_devices():

@@ -24,7 +24,8 @@ import worker.config as config
 
 
 class FloppyCredential(object):
-    def __init__(self):
+    def __init__(self, task_id=None):
+        self.task_id = task_id
         #check if floppy is mounted. if not mount it
         try:
             if not self.is_floppy_mounted():
@@ -59,23 +60,21 @@ class FloppyCredential(object):
         else:
             return False
 
-    @staticmethod
-    def mount_floppy(dev='/dev/fd0', dir=config.FLOPPY_MOUNT_DIR):
+    def mount_floppy(self, dev='/dev/fd0', dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             os.makedirs(dir)
         cmd_line = 'sudo /bin/mount %s %s' % (dev, dir)
         if subprocess.call(cmd_line, shell=True) == 0:
-            worker.log.debug('floppy disk mounted on ' + dir)
+            worker.log.debug('floppy disk mounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to mount floppy')
 
-    @staticmethod
-    def unmount_floppy(dir=config.FLOPPY_MOUNT_DIR):
+    def unmount_floppy(self, dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             return
         cmd_line = 'sudo /bin/umount %s' % dir
         if subprocess.call(cmd_line, shell=True) == 0:
-            worker.log.debug('floppy disk unmounted on ' + dir)
+            worker.log.debug('floppy disk unmounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to unmount floppy')
 

@@ -88,7 +88,7 @@ class EucaEC2Connection(object):
             else:
                 return {'status': vol.status}
 
-    def detach_volume_and_wait(self, volume_id, timeout_sec=3000):
+    def detach_volume_and_wait(self, volume_id, timeout_sec=3000, task_id=None):
         '''
         Attempts to detach a volume, and wait for the volume's status
         to become 'available'. Will raise RunTimeError upon failure.
@@ -111,7 +111,7 @@ class EucaEC2Connection(object):
         while elapsed < timeout_sec:
             vol.update()
             if vol.status == 'available' or vol.status.startswith('delet'):
-                worker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status)
+                worker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
                 return
             time.sleep(5)
             elapsed = time.time() - start

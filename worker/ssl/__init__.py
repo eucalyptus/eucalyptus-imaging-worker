@@ -30,8 +30,8 @@ def write_certificate(cert_file, cert_pem):
         os.chmod(cert_file, 0400)
 
 
-def download_server_certificate(cert_arn):
-    f = FloppyCredential()
+def download_server_certificate(cert_arn, task_id=None):
+    f = FloppyCredential(task_id=task_id)
     host = config.get_clc_host()
     access_key_id = config.get_access_key_id()
     secret_access_key = config.get_secret_access_key()

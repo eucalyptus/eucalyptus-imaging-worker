@@ -39,7 +39,7 @@ file_log_handler.setFormatter(local_formatter)
 log.addHandler(file_log_handler)
 botolog.addHandler(file_log_handler)
 # remote handler
-if config.get_log_server() != None and config.get_log_server_port() != None:
+if config.get_log_server() is not None and config.get_log_server_port() is not None:
     remote_formatter = logging.Formatter('imaging-worker ' + config.get_worker_id() + ' [%(levelname)s]:%(message)s')
     remote_log_handler = SysLogHandler(address=(config.get_log_server(), config.get_log_server_port()),
                                        facility=SysLogHandler.LOG_DAEMON)
@@ -62,3 +62,23 @@ def set_loglevel(lvl):
 
     log.setLevel(lvl_num)
     botolog.setLevel(lvl_num)
+
+
+class CustomLog:
+    def info(self, message, process=None):
+        log.info(message if process is None else '(%s) %s' % (process, message))
+
+    def warn(self, message, process=None):
+        log.warn(message if process is None else '(%s) %s' % (process, message))
+
+    def error(self, message, process=None):
+        log.error(message if process is None else '(%s) %s' % (process, message))
+
+    def debug(self, message, process=None):
+        log.debug(message if process is None else '(%s) %s' % (process, message))
+
+    def critical(self, message, process=None):
+        log.critical(message if process is None else '(%s) %s' % (process, message))
+
+    def exception(self, message, process=None):
+        log.exception(message if process is None else '(%s) %s' % (process, message))
