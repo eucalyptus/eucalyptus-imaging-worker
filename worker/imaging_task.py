@@ -427,7 +427,7 @@ class VolumeImagingTask(ImagingTask):
                       '--import-manifest-url', manifest,
                       '--output-path', device_name,
                       '--cloud-cert-path', cloud_cert_path]
-            worker.log.debug('Running %s', ' '.join(params), self.task_id)
+            worker.log.debug('Running %s' % ' '.join(params), self.task_id)
             return subprocess.Popen(params, stderr=subprocess.PIPE)
         except Exception, err:
             worker.log.error('Could not start data download: %s' % err, self.task_id)
