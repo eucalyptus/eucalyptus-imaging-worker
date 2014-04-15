@@ -240,7 +240,7 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--upload-policy=' + self.s3_upload_policy,
                       '--upload-policy-signature=' + self.s3_upload_policy_signature,
                       '--cloud-cert-path=' + self.cloud_cert_path]
-            worker.log.debug('Running %s', ' '.join(params), self.task_id)
+            worker.log.debug('Running %s' % ' '.join(params), self.task_id)
             # added for debug TODO: remove later
             out = open("/tmp/stdout.txt", "wb")
             err = open("/tmp/stderr.txt", "wb")
