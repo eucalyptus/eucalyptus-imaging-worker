@@ -212,8 +212,7 @@ class EucaISConnection(object):
         if resp.status != 200:
             raise httplib.HTTPException(resp.status, resp.reason, resp.read())
         root = objectify.XML(resp.read())
-        return 'true' == root.cancelled.text if hasattr(root, 'cancelled') else False
-
+        return 'true' != root.cancelled.text if hasattr(root, 'cancelled') else True
 
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,

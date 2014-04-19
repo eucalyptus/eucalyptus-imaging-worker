@@ -31,21 +31,17 @@ import threading
 from lxml import objectify
 import worker.ssl
 
-
-class ReportThread(threading.Thread):
+class TaskThread(threading.Thread):
     def __init__(self, function):
         threading.Thread.__init__(self)
-        self.exit_flag = False
         self.function = function
+        self.result = None
 
     def run(self):
-        while not self.exit_flag:
-            self.function()
-            time.sleep(10)
+        self.result = self.function()
 
-    def stop(self):
-        self.exit_flag = True
-
+    def get_result(self):
+        return self.result
 
 class ImagingTask(object):
     FAILED_STATE = 'FAILED'
@@ -59,6 +55,9 @@ class ImagingTask(object):
                                                         aws_access_key_id=config.get_access_key_id(),
                                                         aws_secret_access_key=config.get_secret_access_key(),
                                                         security_token=config.get_security_token())
+        self.should_run = True
+        self.bytes_transferred = None
+        self.volume_id = None
 
     def get_task_id(self):
         return self.task_id
@@ -66,40 +65,56 @@ class ImagingTask(object):
     def get_task_type(self):
         return self.task_type
 
-    def process_task(self):
-        if self.run_task():
-            self.report_done()
-            return True
-        else:
-            self.report_failed()
-            return False
+    def run_task(self):
+        raise NotImplementedError()
 
-    def report_running(self, volume_id=None, bytes_transferred=None):
-        return self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, volume_id, bytes_transferred)
+    def cancel_cleanup(self):
+        raise NotImplementedError()
+
+    def process_task(self):
+        self.task_thread = TaskThread(self.run_task)
+        self.task_thread.start()
+        while self.task_thread.is_alive():
+            time.sleep(10)
+            if not self.report_running(): # cancelled by imaging service
+                worker.log.debug('task is cancelled by imaging service', self.task_id)
+                self.cancel()
+        if not self.is_cancelled():
+            if self.task_thread.get_result():
+                self.report_done()
+                return True
+            else:
+                self.report_failed()
+                return False 
+        else:
+            return False
+  
+    def cancel(self):
+        #set should_run=False (to stop the task thread)
+        self.should_run = False
+        if self.task_thread:
+            self.task_thread.join() # wait for the task thread to release
+        try:
+            self.cancel_cleanup() # any task specific cleanup
+        except Exception, err:
+            worker.log.warn('Failed to cleanup task after cancellation: %s' % err, self.task_id)     
+
+    def is_cancelled(self):
+        return not self.should_run
+
+    def report_running(self):
+        return self.is_conn.put_import_task_status(self.task_id, ImagingTask.EXTANT_STATE, self.volume_id, self.bytes_transferred)
 
     def report_done(self):
-        volume_id = None
-        if hasattr(self, 'volume_id'):
-            volume_id = self.volume_id
-        bytes_transferred = None
-        if hasattr(self, 'bytes_transferred'):
-            bytes_transferred = self.bytes_transferred
-        self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, volume_id, bytes_transferred)
+        self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id, self.bytes_transferred)
 
-    def report_failed(self, volume_id=None, bytes_transferred=None):
-        volume_id = None
-        if hasattr(self, 'volume_id'):
-            volume_id = self.volume_id
-        bytes_transferred = None
-        if hasattr(self, 'bytes_transferred'):
-            bytes_transferred = self.bytes_transferred
-        self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, volume_id, bytes_transferred)
+    def report_failed(self):
+        self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id, self.bytes_transferred)
 
     """
     param: instance_import_task (object representing ImagingService's message)
     return: ImagingTask
     """
-
     @staticmethod
     def from_import_task(import_task):
         if not import_task:
@@ -144,24 +159,6 @@ class ImagingTask(object):
                                             import_images=import_images)
         return task
 
-    def wait_with_status(self, process):
-        while process.poll() is None:
-            # get bytes transferred
-            output = process.stderr.readline().strip()
-            bytes_transferred = 0
-            try:
-                res = json.loads(output)
-                bytes_transferred = res['status']['bytes_downloaded']
-            except Exception, ex:
-                worker.log.warn("Download image subprocess reports invalid status. Error: %s" % ex, self.task_id)
-            worker.log.debug("Status %s, bytes transferred: %d" % (output, bytes_transferred), self.task_id)
-            if self.report_running(self.volume_id if type(self) is VolumeImagingTask else None, bytes_transferred):
-                worker.log.info('Conversion task %s was canceled by server' % self.task_id, self.task_id)
-                process.kill()
-            else:
-                time.sleep(10)
-
-
 class InstanceStoreImagingTask(ImagingTask):
     def __init__(self, task_id, bucket=None, prefix=None, architecture=None, owner_account_id=None,
                  owner_access_key=None, s3_upload_policy=None, s3_upload_policy_signature=None, s3_url=None,
@@ -185,6 +182,7 @@ class InstanceStoreImagingTask(ImagingTask):
         #  {'id':'eri-xxxx', 'download_manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
         #  {'id':'emi-xxxx', 'download_manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
         self.import_images = import_images
+        self.process = None
 
     def __repr__(self):
         return 'instance-store conversion task:%s' % self.task_id
@@ -242,19 +240,38 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--cloud-cert-path=' + self.cloud_cert_path]
             worker.log.debug('Running %s' % ' '.join(params), self.task_id)
             # added for debug TODO: remove later
-            out = open("/tmp/stdout.txt", "wb")
-            err = open("/tmp/stderr.txt", "wb")
-            report_thread = ReportThread(self.report_running)
-            report_thread.start()
-            process = subprocess.call(params, stderr=err, stdout=out)
-            report_thread.stop()
-            out.close()
-            err.close()
+            self.out_file = open("/tmp/stdout.txt", "wb")
+            self.err_file = open("/tmp/stderr.txt", "wb")
+            self.process = subprocess.Popen(params, stderr=self.err_file, stdout=self.out_file)
+            if not self.process:
+                raise Exception('Failed to start the workflow process')
+            while not self.is_cancelled() and self.process.poll() == None:
+                time.sleep(1)
+            if self.process.poll() != None:
+                self.out_file.close()
+                self.err_file.close()
+            if self.process.returncode != None and self.process.returncode == 0:
+                return True
+            elif self.process.returncode != None:
+                worker.log.warn('euca-run-workflow returned code: %d' % self.process.returncode, self.task_id)
+                return False
+            else:
+                worker.log.warn('euca-run-workflow has been killed', self.task_id)
+                return False
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err, self.task_id)
             return False
-        return True
 
+    def cancel_cleanup(self):
+        try:
+            if self.out_file:
+                self.out_file.close()
+            if self.err_file:
+                self.err_file.close()
+            if self.process and self.process.poll()==None:
+                self.process.kill()
+        except Exception, err:
+            worker.log.error('Failed to cleanup during task cancellation: %s' % err, self.task_id)
 
 class VolumeImagingTask(ImagingTask):
     _GIG_ = 1073741824
@@ -277,6 +294,7 @@ class VolumeImagingTask(ImagingTask):
         self.volume = self.volume[0]
         self.volume_attached_dev = None
         self.instance_id = config.get_worker_id()
+        self.process = None
 
 
     def __repr__(self):
@@ -477,15 +495,8 @@ class VolumeImagingTask(ImagingTask):
                                          timeout_sec), self.task_id)
         return True
 
-    def run_download_to_volume(self, device_to_use):
-        # download image to the block device and monitor process
-        process = self.download_data(self.manifest_url, device_to_use)
-        if process is not None:
-            self.wait_with_status(process)
-
     def run_task(self):
         try:
-            done_with_errors = True
             device_to_use = None
             manifest = self.get_manifest()
             image_size = int(manifest.image.size)
@@ -497,10 +508,9 @@ class VolumeImagingTask(ImagingTask):
                                              self.volume.size,
                                              image_size))
                 worker.log.info('Attaching volume %s' % self.volume.id, self.task_id)
-                report_thread = ReportThread(self.report_running)
-                report_thread.start()
                 device_to_use = self.attach_volume()
-                report_thread.stop()
+                if self.is_cancelled():
+                    raise Exception('Task is cancelled')
                 worker.log.debug('Using %s as destination' % device_to_use, self.task_id)
                 device_size = self.get_partition_size(device_to_use)
                 worker.log.debug('Attached device size is %d bytes' % device_size, self.task_id)
@@ -509,32 +519,47 @@ class VolumeImagingTask(ImagingTask):
                     raise Exception('Device is too small for the image/volume')
                 try:
                     self.add_write_permission(device_to_use)
-                    self.run_download_to_volume(device_to_use)
-                    done_with_errors = False
+                    self.process = self.download_data(self.manifest_url, device_to_use)
+                    if self.process is not None:
+                        self.wait_with_status(self.process)
+                    else:
+                        raise Exception('Cannot start workflow process')
+                    if self.process.returncode == None:
+                        raise Exception('Process was killed')
+                    elif self.process.returncode != 0:
+                        raise Exception('Return code from the process: %d' % self.process.returncode)
                 except Exception, err:
-                    raise Exception('Failed to download to volume')
+                    raise Exception('Failed to download to volume: %s' % err)
             else:
                 raise Exception('No volume id is found for import-volume task')
-
-            # set DONE or FAILED state
-            if done_with_errors:
-                return False
-            else:
-                return True
+            return True
         except Exception, err:
             tb = traceback.format_exc()
             worker.log.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
+            return False
         finally:
             # detaching volume
-            if device_to_use is not None:
+            if device_to_use is not None and self.volume_id:
                 worker.log.info('Detaching volume %s' % self.volume_id, self.task_id)
-                report_thread = ReportThread(self.report_running)
-                report_thread.start()
-                try:
-                    if self.volume_id:
-                        self.ec2_conn.detach_volume_and_wait(
-                            volume_id=self.volume_id, task_id=self.task_id)
-                finally:
-                    report_thread.stop()
+                self.ec2_conn.detach_volume_and_wait(volume_id=self.volume_id, task_id=self.task_id)
 
+    def wait_with_status(self, process):
+        while not self.is_cancelled() and process.poll() is None:
+            # get bytes transferred
+            output = process.stderr.readline().strip()
+            try:
+                res = json.loads(output)
+                self.bytes_transferred = res['status']['bytes_downloaded']
+            except Exception, ex:
+                worker.log.warn("Download image subprocess reports invalid status. Error: %s" % output, self.task_id)
+            if self.bytes_transferred:
+                worker.log.debug("Status %s, bytes transferred: %d" % (output, self.bytes_transferred), self.task_id)
+            time.sleep(2)
+
+    def cancel_cleanup(self):
+        try:
+            if self.process and self.process.poll()==None:
+                self.process.kill()
+        except Exception, err:
+            worker.log.error('Failed to cleanup during task cancellation: %s' % err, self.task_id)
 

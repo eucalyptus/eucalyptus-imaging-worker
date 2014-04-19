@@ -59,15 +59,19 @@ class WorkerLoop(object):
                                                        aws_secret_access_key=config.get_secret_access_key(),
                                                        security_token=config.get_security_token())
                 import_task = con.get_import_task()
-                task = ImagingTask.from_import_task(import_task)
-                if task:
-                    worker.log.info('Processing import task %s' % task)
-                    if task.process_task():
-                        worker.log.info('Done processing task %s' % task.task_id)
+                try:
+                    task = ImagingTask.from_import_task(import_task)
+                    if task:
+                        worker.log.info('Processing import task %s' % task)
+                        if task.process_task():
+                            worker.log.info('Done processing task %s' % task.task_id)
+                        else:
+                            worker.log.warn('Processing of the task %s failed' % task.task_id)
                     else:
-                        worker.log.warn('Processing of the task %s failed' % task.task_id)
-                else:
-                    pass
+                        pass
+                except Exception, err:
+                    con.put_import_task_status(task_id=import_task.task_id, status='FAILED')
+                    worker.log.error('Failed to process task for unknown reason: %s' % err)
             except Exception, err:
                 tb = traceback.format_exc()
                 worker.log.error(str(tb) +
