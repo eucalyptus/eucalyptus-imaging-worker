@@ -33,7 +33,8 @@ import re
 
 __version__ = '1.0.0-dev'
 Version = __version__
-log = CustomLog()
+log = CustomLog('worker')
+workflow_log = CustomLog('euca-workflow')
 
 
 def get_block_devices():

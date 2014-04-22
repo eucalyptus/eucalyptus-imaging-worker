@@ -19,10 +19,12 @@ import tempfile
 import time
 import json
 import os
+import fcntl
 import re
 import requests
 import config
 import worker
+import string
 import subprocess
 import traceback
 import httplib2
@@ -239,17 +241,30 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--upload-policy-signature=' + self.s3_upload_policy_signature,
                       '--cloud-cert-path=' + self.cloud_cert_path]
             worker.log.debug('Running %s' % ' '.join(params), self.task_id)
-            # added for debug TODO: remove later
-            self.out_file = open("/tmp/stdout.txt", "wb")
-            self.err_file = open("/tmp/stderr.txt", "wb")
-            self.process = subprocess.Popen(params, stderr=self.err_file, stdout=self.out_file)
+            # create process with system default buffer size and make its stdout non-blocking
+            self.process = subprocess.Popen(params, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            fd = self.process.stdout
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
             if not self.process:
                 raise Exception('Failed to start the workflow process')
             while not self.is_cancelled() and self.process.poll() == None:
-                time.sleep(1)
-            if self.process.poll() != None:
-                self.out_file.close()
-                self.err_file.close()
+                # log stdout and stderr from euca-run-workflow into worker.log
+                try:
+                    line = self.process.stdout.readline()
+                    if line:
+                        line = line.strip()
+                        s = filter(None, line.split(' '))
+                        level = s[2] if len(s) > 3 else None
+                        msg = string.join(s[3:])
+                        if level in('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
+                            f = getattr(worker.workflow_log, level.lower())
+                            f(msg, self.task_id) 
+                        else:         
+                            worker.workflow_log.info(line, self.task_id)
+                except:
+                    pass
+                time.sleep(0.01)
             if self.process.returncode != None and self.process.returncode == 0:
                 return True
             elif self.process.returncode != None:
@@ -264,10 +279,6 @@ class InstanceStoreImagingTask(ImagingTask):
 
     def cancel_cleanup(self):
         try:
-            if self.out_file:
-                self.out_file.close()
-            if self.err_file:
-                self.err_file.close()
             if self.process and self.process.poll()==None:
                 self.process.kill()
         except Exception, err:

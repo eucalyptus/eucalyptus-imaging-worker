@@ -29,15 +29,18 @@ LOG_FILE = '/var/log/eucalyptus-imaging-worker/worker.log'
 LOG_BYTES = 1024 * 1024  # 1MB
 
 log = logging.getLogger('worker')
-botolog = logging.getLogger('boto')
+boto_log = logging.getLogger('boto')
+workflow_log = logging.getLogger('euca-workflow')
 log.setLevel(logging.INFO)
-botolog.setLevel(logging.INFO)
+boto_log.setLevel(logging.INFO)
+workflow_log.setLevel(logging.INFO)
 # local handler
 local_formatter = logging.Formatter('%(asctime)s %(name)s [%(levelname)s]:%(message)s')
 file_log_handler = RotatingFileHandler(LOG_FILE, maxBytes=LOG_BYTES, backupCount=5)
 file_log_handler.setFormatter(local_formatter)
 log.addHandler(file_log_handler)
-botolog.addHandler(file_log_handler)
+boto_log.addHandler(file_log_handler)
+workflow_log.addHandler(file_log_handler)
 # remote handler
 if config.get_log_server() is not None and config.get_log_server_port() is not None:
     remote_formatter = logging.Formatter('imaging-worker ' + config.get_worker_id() + ' [%(levelname)s]:%(message)s')
@@ -45,6 +48,7 @@ if config.get_log_server() is not None and config.get_log_server_port() is not N
                                        facility=SysLogHandler.LOG_DAEMON)
     remote_log_handler.setFormatter(remote_formatter)
     log.addHandler(remote_log_handler)
+    workflow_log.addHandler(remote_log_handler)
 
 # Log level will default to INFO
 # If you want more information (like DEBUG) you will have to set the log level
@@ -61,24 +65,27 @@ def set_loglevel(lvl):
         lvl_num = lvl
 
     log.setLevel(lvl_num)
-    botolog.setLevel(lvl_num)
-
+    boto_log.setLevel(lvl_num)
+    workflow_log.setLevel(lvl_num) 
 
 class CustomLog:
+    def __init__(self, logger_name):
+        self.log = logging.getLogger(logger_name)
+
     def info(self, message, process=None):
-        log.info(message if process is None else '(%s) %s' % (process, message))
+        self.log.info(message if process is None else '(%s) %s' % (process, message))
 
     def warn(self, message, process=None):
-        log.warn(message if process is None else '(%s) %s' % (process, message))
+        self.log.warn(message if process is None else '(%s) %s' % (process, message))
 
     def error(self, message, process=None):
-        log.error(message if process is None else '(%s) %s' % (process, message))
+        self.log.error(message if process is None else '(%s) %s' % (process, message))
 
     def debug(self, message, process=None):
-        log.debug(message if process is None else '(%s) %s' % (process, message))
+        self.log.debug(message if process is None else '(%s) %s' % (process, message))
 
     def critical(self, message, process=None):
-        log.critical(message if process is None else '(%s) %s' % (process, message))
+        self.log.critical(message if process is None else '(%s) %s' % (process, message))
 
     def exception(self, message, process=None):
-        log.exception(message if process is None else '(%s) %s' % (process, message))
+        self.log.exception(message if process is None else '(%s) %s' % (process, message))
