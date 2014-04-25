@@ -34,12 +34,11 @@ class WorkerLoop(object):
     def __init__(self):
         # get the instance id from metadata service
         self.__instance_id = None
-        self.__euca_host = config.get_clc_host()
         if self.__instance_id is None:
             self.__instance_id = config.get_worker_id()
 
         self.__status = WorkerLoop.STOPPED
-        worker.log.debug('main loop running with clc_host=%s, instance_id=%s' % (self.__euca_host, self.__instance_id))
+        worker.log.debug('main loop running with instance_id=%s' % (self.__instance_id))
 
     def start(self):
         # check if workflow enabled
@@ -54,8 +53,7 @@ class WorkerLoop(object):
         while self.__status == WorkerLoop.RUNNING:
             worker.log.info('Querying for new imaging task')
             try:
-                con = worker.ws.connect_imaging_worker(host_name=self.__euca_host,
-                                                       aws_access_key_id=config.get_access_key_id(),
+                con = worker.ws.connect_imaging_worker(aws_access_key_id=config.get_access_key_id(),
                                                        aws_secret_access_key=config.get_secret_access_key(),
                                                        security_token=config.get_security_token())
                 import_task = con.get_import_task()

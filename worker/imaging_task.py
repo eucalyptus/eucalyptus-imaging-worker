@@ -55,8 +55,7 @@ class ImagingTask(object):
     def __init__(self, task_id, task_type):
         self.task_id = task_id
         self.task_type = task_type
-        self.is_conn = worker.ws.connect_imaging_worker(host_name=config.get_clc_host(),
-                                                        aws_access_key_id=config.get_access_key_id(),
+        self.is_conn = worker.ws.connect_imaging_worker(aws_access_key_id=config.get_access_key_id(),
                                                         aws_secret_access_key=config.get_secret_access_key(),
                                                         security_token=config.get_security_token())
         self.should_run = True
@@ -293,7 +292,6 @@ class VolumeImagingTask(ImagingTask):
         ImagingTask.__init__(self, task_id, "import_volume")
         self.manifest_url = manifest_url
         self.ec2_conn = worker.ws.connect_ec2(
-            host_name=config.get_clc_host(),
             aws_access_key_id=config.get_access_key_id(),
             aws_secret_access_key=config.get_secret_access_key(),
             security_token=config.get_security_token())

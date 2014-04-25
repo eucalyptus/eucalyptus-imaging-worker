@@ -29,13 +29,22 @@ import os
 import subprocess
 import sys
 import re
-
+import time
 
 __version__ = '1.0.0-dev'
 Version = __version__
 log = CustomLog('worker')
 workflow_log = CustomLog('euca-workflow')
 
+def spin_locks():
+    try:
+        while not (os.path.exists("/var/lib/eucalyptus-imaging-worker/dns.lock") and os.path.exists("/var/lib/eucalyptus-imaging-worker/ntp.lock")):
+            time.sleep(2)
+            log.debug('waiting on dns and ntp setup (reboot if continued)')
+        os.remove("/var/lib/eucalyptus-imaging-worker/dns.lock")
+        os.remove("/var/lib/eucalyptus-imaging-worker/ntp.lock")
+    except Exception, err:
+        log.error('failed to spin on locks: %s' % err)
 
 def get_block_devices():
     ret_list = []
@@ -52,6 +61,7 @@ def run_as_sudo(cmd):
 
 
 def start_worker():
+    spin_locks()
     if run_as_sudo('modprobe floppy > /dev/null') != 0:
         log.error('failed to load floppy driver')
     try:

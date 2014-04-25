@@ -33,21 +33,21 @@ import worker
 import worker.config as config
 
 
-def connect_euare(host_name=None, port=80, path="services/Euare", aws_access_key_id=None,
+def connect_euare(host_name=config.get_euare_service_url(), port=8773, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaEuareConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                                aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                                **kwargs)
 
 
-def connect_imaging_worker(host_name=None, port=80, path="services/Imaging", aws_access_key_id=None,
+def connect_imaging_worker(host_name=config.get_imaging_service_url(), port=8773, path="services/Imaging", aws_access_key_id=None,
                            aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaISConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                             aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                             **kwargs)
 
 
-def connect_ec2(host_name=None, port=80, path="services/Eucalyptus", aws_access_key_id=None,
+def connect_ec2(host_name=config.get_compute_service_url(), port=8773, path="services/Eucalyptus", aws_access_key_id=None,
                 aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaEC2Connection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                              aws_secret_access_key=aws_secret_access_key, security_token=security_token,
@@ -57,7 +57,7 @@ def connect_ec2(host_name=None, port=80, path="services/Eucalyptus", aws_access_
 class EucaEC2Connection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Eucalyptus',
-                 security_token=None, validate_certs=False, port=80):
+                 security_token=None, validate_certs=False, port=8773):
         region = RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
                                   aws_secret_access_key=aws_secret_access_key, port=port,
@@ -178,7 +178,7 @@ class EucaEC2Connection(object):
 class EucaISConnection(object):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  host_name=None, is_secure=False, path='services/Imaging',
-                 security_token=None, validate_certs=False, port=80):
+                 security_token=None, validate_certs=False, port=8773):
         region = RegionInfo(name='eucalyptus', endpoint=host_name)
         self.conn = EC2Connection(region=region, host=host_name, aws_access_key_id=aws_access_key_id,
                                   aws_secret_access_key=aws_secret_access_key, port=port,
