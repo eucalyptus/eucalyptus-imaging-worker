@@ -566,7 +566,7 @@ class VolumeImagingTask(ImagingTask):
                     self.task_id)
             if self.bytes_transferred:
                 worker.log.debug("Status %s, bytes transferred: %d" % (output, self.bytes_transferred), self.task_id)
-            time.sleep(2)
+            time.sleep(0.1)
 
     def cancel_cleanup(self):
         try:
