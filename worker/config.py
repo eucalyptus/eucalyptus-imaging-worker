@@ -103,24 +103,23 @@ def get_security_token():
     token = get_provider().get_security_token()
     return token
 
+
 def get_imaging_service_url():
     return get_value('imaging_service_url')
+
 
 def get_compute_service_url():
     return get_value('compute_service_url')
 
+
 def get_euare_service_url():
     return get_value('euare_service_url')
+
 
 def get_clc_port():
     val = get_value('eucalyptus_port')
     return int(val) if val is not None else None
 
-def get_ec2_path():
-    return get_value('ec2_path')
-
-def get_imaging_path():
-    return get_value('imaging_path')
 
 def get_log_server():
     return get_value('log_server', optional=True)
