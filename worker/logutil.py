@@ -18,8 +18,19 @@
 
 import logging
 import config
+import os
 from logging.handlers import RotatingFileHandler
 from logging.handlers import SysLogHandler
+
+class RestrictedPermissionRotatingFileHandler(RotatingFileHandler):
+    def _open(self):
+        """
+        Override base class method to set 600 mod on a newly created log.
+        """
+        umask=os.umask(0o066)
+        rfh = RotatingFileHandler._open(self)
+        os.umask(umask)
+        return rfh
 
 #
 # We can't specify the log file in the config module since that will
@@ -36,7 +47,7 @@ boto_log.setLevel(logging.INFO)
 workflow_log.setLevel(logging.INFO)
 # local handler
 local_formatter = logging.Formatter('%(asctime)s %(name)s [%(levelname)s]:%(message)s')
-file_log_handler = RotatingFileHandler(LOG_FILE, maxBytes=LOG_BYTES, backupCount=5)
+file_log_handler = RestrictedPermissionRotatingFileHandler(LOG_FILE, maxBytes=LOG_BYTES, backupCount=5)
 file_log_handler.setFormatter(local_formatter)
 log.addHandler(file_log_handler)
 boto_log.addHandler(file_log_handler)
