@@ -560,7 +560,7 @@ class VolumeImagingTask(ImagingTask):
                 self.ec2_conn.detach_volume_and_wait(volume_id=self.volume_id, task_id=self.task_id)
 
     def wait_with_status(self, process):
-        worker.log.debug('Waiting for download process')
+        worker.log.debug('Waiting for download process', self.task_id)
         while not self.is_cancelled() and process.poll() is None:
             try:
                  # get bytes transferred

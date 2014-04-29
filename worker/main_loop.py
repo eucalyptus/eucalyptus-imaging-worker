@@ -41,14 +41,6 @@ class WorkerLoop(object):
         worker.log.debug('main loop running with instance_id=%s' % (self.__instance_id))
 
     def start(self):
-        # check if workflow enabled
-        """
-        if subprocess.call(['/usr/libexec/eucalyptus/euca-run-workflow', '-h'], stdout=os.devnull, stderr=os.devnull) != 0:
-            worker.log.error('Failed to find euca-run-workflow. Would not start service')
-            self.__status = WorkerLoop.STOPPED
-        else:
-            self.__status = WorkerLoop.RUNNING
-        """
         self.__status = WorkerLoop.RUNNING
         while self.__status == WorkerLoop.RUNNING:
             worker.log.info('Querying for new imaging task')
@@ -60,11 +52,11 @@ class WorkerLoop(object):
                 try:
                     task = ImagingTask.from_import_task(import_task)
                     if task:
-                        worker.log.info('Processing import task %s' % task)
+                        worker.log.info('Processing import task %s' % task, task.task_id)
                         if task.process_task():
-                            worker.log.info('Done processing task %s' % task.task_id)
+                            worker.log.info('Done processing task %s' % task.task_id, task.task_id)
                         else:
-                            worker.log.warn('Processing of the task %s failed' % task.task_id)
+                            worker.log.warn('Processing of the task %s failed' % task.task_id, task.task_id)
                     else:
                         pass
                 except Exception, err:
