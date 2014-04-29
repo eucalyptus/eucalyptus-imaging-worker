@@ -52,6 +52,8 @@ class ImagingTask(object):
     DONE_STATE = 'DONE'
     EXTANT_STATE = 'EXTANT'
 
+    EXTANT_STATUS_REPORT_INTERVAL = 30
+
     def __init__(self, task_id, task_type):
         self.task_id = task_id
         self.task_type = task_type
@@ -79,7 +81,7 @@ class ImagingTask(object):
         self.task_thread = TaskThread(self.run_task)
         self.task_thread.start()
         while self.task_thread.is_alive():
-            time.sleep(10)
+            time.sleep(self.EXTANT_STATUS_REPORT_INTERVAL)
             if not self.report_running():  # cancelled by imaging service
                 worker.log.debug('task is cancelled by imaging service', self.task_id)
                 self.cancel()
@@ -264,7 +266,6 @@ class InstanceStoreImagingTask(ImagingTask):
                             worker.workflow_log.info(line, self.task_id)
                 except:
                     pass
-                time.sleep(0.01)
             if self.process.returncode != None and self.process.returncode == 0:
                 return True
             elif self.process.returncode != None:
@@ -321,6 +322,7 @@ class VolumeImagingTask(ImagingTask):
         return int(t.rstrip('\n'))
 
     def add_write_permission(self, partition):
+        worker.log.debug('Setting permissions for %s' % partition)
         subprocess.call(["sudo", "chmod", "a+w", partition])
 
     def get_manifest(self):
@@ -446,8 +448,8 @@ class VolumeImagingTask(ImagingTask):
             raise ValueError('Device for volume: {0} could not be verfied'
                              ' against dev:{1}'.format(volume_id, blockdev))
 
-    def download_data(self, manifest_url, device_name):
-        manifest = manifest_url.replace('imaging@', '')
+    def start_download_process(self, device_name):
+        manifest = self.manifest_url.replace('imaging@', '')
         cloud_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
         try:
             params = ['/usr/libexec/eucalyptus/euca-run-workflow',
@@ -456,10 +458,13 @@ class VolumeImagingTask(ImagingTask):
                       '--output-path', device_name,
                       '--cloud-cert-path', cloud_cert_path]
             worker.log.debug('Running %s' % ' '.join(params), self.task_id)
-            return subprocess.Popen(params, stderr=subprocess.PIPE)
+            # create process with system default buffer size and make its stderr non-blocking
+            self.process = subprocess.Popen(params, stderr=subprocess.PIPE)
+            fd = self.process.stderr
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
         except Exception, err:
             worker.log.error('Could not start data download: %s' % err, self.task_id)
-            return None
 
     def detach_volume(self, timeout_sec=3000, local_dev_timeout=30):
         worker.log.debug('Detaching volume %s' % self.volume.id, self.task_id)
@@ -529,7 +534,7 @@ class VolumeImagingTask(ImagingTask):
                     raise Exception('Device is too small for the image/volume')
                 try:
                     self.add_write_permission(device_to_use)
-                    self.process = self.download_data(self.manifest_url, device_to_use)
+                    self.start_download_process(device_to_use)
                     if self.process is not None:
                         self.wait_with_status(self.process)
                     else:
@@ -539,6 +544,7 @@ class VolumeImagingTask(ImagingTask):
                     elif self.process.returncode != 0:
                         raise Exception('Return code from the process: %d' % self.process.returncode)
                 except Exception, err:
+                    worker.log.error(err) 
                     raise Exception('Failed to download to volume: %s' % err)
             else:
                 raise Exception('No volume id is found for import-volume task')
@@ -554,19 +560,24 @@ class VolumeImagingTask(ImagingTask):
                 self.ec2_conn.detach_volume_and_wait(volume_id=self.volume_id, task_id=self.task_id)
 
     def wait_with_status(self, process):
+        worker.log.debug('Waiting for download process')
         while not self.is_cancelled() and process.poll() is None:
-            # get bytes transferred
-            output = process.stderr.readline().strip()
             try:
-                res = json.loads(output)
-                self.bytes_transferred = res['status']['bytes_downloaded']
-            except Exception, ex:
-                worker.log.warn(
-                    "Download image subprocess reports invalid status. Output: %s. Error: %s" % (output, ex),
-                    self.task_id)
-            if self.bytes_transferred:
-                worker.log.debug("Status %s, bytes transferred: %d" % (output, self.bytes_transferred), self.task_id)
-            time.sleep(0.1)
+                 # get bytes transferred
+                line = process.stderr.readline()
+                if line:
+                    line = line.strip()
+                    try:
+                        res = json.loads(line)
+                        self.bytes_transferred = res['status']['bytes_downloaded']
+                    except Exception, ex:
+                        worker.log.warn(
+                            "Download image subprocess reports invalid status. Output: %s. Error: %s" % (line, ex),
+                        self.task_id)
+                    if self.bytes_transferred:
+                       worker.log.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred), self.task_id)
+            except:
+                pass
 
     def cancel_cleanup(self):
         try:
