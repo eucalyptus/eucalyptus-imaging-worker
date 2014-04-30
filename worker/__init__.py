@@ -36,15 +36,18 @@ Version = __version__
 log = CustomLog('worker')
 workflow_log = CustomLog('euca-workflow')
 
+
 def spin_locks():
     try:
-        while not (os.path.exists("/var/lib/eucalyptus-imaging-worker/dns.lock") and os.path.exists("/var/lib/eucalyptus-imaging-worker/ntp.lock")):
+        while not (os.path.exists("/var/lib/eucalyptus-imaging-worker/dns.lock") and os.path.exists(
+                "/var/lib/eucalyptus-imaging-worker/ntp.lock")):
             time.sleep(2)
             log.debug('waiting on dns and ntp setup (reboot if continued)')
         os.remove("/var/lib/eucalyptus-imaging-worker/dns.lock")
         os.remove("/var/lib/eucalyptus-imaging-worker/ntp.lock")
     except Exception, err:
         log.error('failed to spin on locks: %s' % err)
+
 
 def get_block_devices():
     ret_list = []
@@ -66,6 +69,11 @@ def start_worker():
         log.error('failed to load floppy driver')
     try:
         res = get_block_devices()
+        if len(res) != 2:
+            log.error(
+                "Found %d block device(s). Imaging VM (re)started in a very small type or with volume(s) attached" % len(
+                    res))
+            sys.exit(1)
         res.sort(reverse=True)
         last_dev = res[0]
         worker.config.get_worker_id()
@@ -77,7 +85,7 @@ def start_worker():
                 # try to mount first, there is a chance that system was restarted and
                 # last_dev was formatted and prep before
                 if run_as_sudo('mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
-                    if run_as_sudo('mkfs.ext3 %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo(
+                    if run_as_sudo('mkfs.ext3 -F %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo(
                                     'mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
                         log.error('failed to format and mount %s ' % last_dev)
                     else:
