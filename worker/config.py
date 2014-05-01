@@ -115,12 +115,6 @@ def get_compute_service_url():
 def get_euare_service_url():
     return get_value('euare_service_url')
 
-
-def get_clc_port():
-    val = get_value('eucalyptus_port')
-    return int(val) if val is not None else None
-
-
 def get_log_server():
     return get_value('log_server', optional=True)
 
