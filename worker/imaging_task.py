@@ -299,7 +299,7 @@ class VolumeImagingTask(ImagingTask):
         self.volume = None
         self.volume_id = volume_id
         if self.volume_id:
-            self.volume = self.ec2_conn.conn.get_all_volumes([self.volume_id])
+            self.volume = self.ec2_conn.conn.get_all_volumes([self.volume_id,'verbose'])
         if not self.volume:
             raise ValueError('Request for volume:"{0}" returned:"{1}"'
                              .format(volume_id, str(self.volume)))

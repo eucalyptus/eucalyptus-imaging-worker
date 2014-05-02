@@ -78,15 +78,14 @@ class EucaEC2Connection(object):
     def describe_volume(self, volume_id=None):
         if volume_id == None:
             raise RuntimeError("There is no volume_id provoded")
-        res = self.describe_volumes([volume_id, 'verbose'])
-        if len(res) != 1:
-            raise RuntimeError("Can't describe volume %s" % volume_id)
-        else:
-            vol = res[0]
-            if vol.status == 'in-use':
-                return {'status': vol.attachment_state(), 'instance_id': vol.attach_data.instance_id}
-            else:
-                return {'status': vol.status}
+        vols = self.describe_volumes([volume_id, 'verbose'])
+        for vol in vols:
+            if vol.id == volume_id:
+                break
+        if not vol or vol.id != volume_id:
+            raise RuntimeError('Failed to lookup volume:"{0}" from system'
+                               .format(volume_id))
+        return vol
 
     def detach_volume_and_wait(self, volume_id, timeout_sec=3000, task_id=None):
         '''
@@ -96,20 +95,14 @@ class EucaEC2Connection(object):
         :param timeout_sec: Timeout to wait for volume to detach in seconds
         '''
         vol = None
-        vols = self.conn.get_all_volumes(volume_id)
-        for vol in vols:
-            if vol.id == volume_id:
-                break
-        if not vol or vol.id != volume_id:
-            raise RuntimeError('Failed to lookup volume:"{0}" from system'
-                               .format(volume_id))
+        vol = self.describe_volume(volume_id)
         attachment_state = vol.attachment_state()
         if attachment_state and attachment_state != 'detaching':
             vol.detach()
         start = time.time()
         elapsed = 0
         while elapsed < timeout_sec:
-            vol.update()
+            vol = self.describe_volume(volume_id)
             if vol.status == 'available' or vol.status.startswith('delet'):
                 worker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
                 return
@@ -134,18 +127,12 @@ class EucaEC2Connection(object):
 
         '''
         vol = None
-        vols = self.conn.get_all_volumes(volume_id)
-        for vol in vols:
-            if vol.id == volume_id:
-                break
-        if not vol or vol.id != volume_id:
-            raise RuntimeError('Failed to lookup volume:"{0}" from system'
-                               .format(volume_id))
+        vol = self.describe_volume(volume_id)
         # Attempt to attach
         vol.attach(instance_id=instance_id, device=device_name)
         # Monitor attached state to attached or failure
         start = time.time()
-        vol.update()
+        vol = self.describe_volume(volume_id)
         while vol.attachment_state() != 'attached':
             time.sleep(poll_interval)
             elapsed = time.time() - start
@@ -161,7 +148,7 @@ class EucaEC2Connection(object):
                                                           elapsed,
                                                           timeout_sec))
             time.sleep(poll_interval)
-            vol.update()
+            vol = self.describe_volume(volume_id)
         # Final check for correct volume attachment
         attached_id = vol.attach_data.instance_id
         if attached_id != instance_id:
