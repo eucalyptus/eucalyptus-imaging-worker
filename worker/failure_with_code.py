@@ -15,17 +15,11 @@
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
+from exceptions import RuntimeError
 
-CLEAN_UP_FAILURE = "CleanUpFailure"
-INPUT_DATA_FAILURE = "InvalidInputData"
-DOWNLOAD_DATA_FAILURE = "FailureToDownloadData"
-# Euca-workflow failure
-WORKFLOW_FAILURE = "FailureToRunWorkflow"
-# Can't determine the reason
-GENERAL_FAILURE = "GeneralFailure"
-ATTACH_VOLUME_FAILURE = "FailureToAttachVolume"
-DETACH_VOLUME_FAILURE = "FailureToDetachVolume"
-# Failure to download or process certificate
-CERTIFICATE_FAILURE = "CertificateFailure"
-TASK_DONE = "Done"
-TASK_CANCELED = "Canceled"
+
+class FailureWithCode(RuntimeError):
+    def __init__(self, message, failure_code):
+        # Call the base class constructor with the parameters it needs
+        RuntimeError.__init__(self, message)
+        self.failure_code = failure_code

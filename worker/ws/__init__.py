@@ -31,7 +31,8 @@ from collections import Iterable
 from lxml import objectify
 import worker
 import worker.config as config
-
+from worker.task_exit_codes import *
+from worker.failure_with_code import FailureWithCode
 
 def connect_euare(host_name=config.get_euare_service_url(), port=8773, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -112,9 +113,9 @@ class EucaEC2Connection(object):
         instance = 'unknown'
         if hasattr(vol, "attach_data"):
             instance = str(vol.attach_data.instance_id)
-        raise RuntimeError('Volume:"{0}" failed to detach from:"{1}". '
+        raise FailureWithCode('Volume:"{0}" failed to detach from:"{1}". '
                            'Status:"{2}", elapsed: {3}/{4}'
-                           .format(vol.id, instance, vol.status, elapsed, timeout_sec))
+                           .format(vol.id, instance, vol.status, elapsed, timeout_sec), DETACH_VOLUME_FAILURE)
 
     def attach_volume_and_wait(self,
                                volume_id,
@@ -139,27 +140,27 @@ class EucaEC2Connection(object):
             # Catch failure states and raise error
             if elapsed > timeout_sec or \
                 vol.status == 'available' or \
-                vol.status.startswith('delet'):
-                raise RuntimeError('Failed to attach volume:"{0}" '
+                    vol.status.startswith('delet'):
+                raise FailureWithCode('Failed to attach volume:"{0}" '
                                    'to attach to:"{1}". Status:"{2}". '
                                    'Elapsed:"{3}/{4}"'.format(volume_id,
                                                           instance_id,
                                                           vol.status,
                                                           elapsed,
-                                                          timeout_sec))
+                                                          timeout_sec), ATTACH_VOLUME_FAILURE)
             time.sleep(poll_interval)
             vol = self.describe_volume(volume_id)
         # Final check for correct volume attachment
         attached_id = vol.attach_data.instance_id
         if attached_id != instance_id:
-            raise RuntimeError('Volume:"{0}" not attached to correct '
+            raise FailureWithCode('Volume:"{0}" not attached to correct '
                                'instance:"{1}". Status:"{2}". Attached:"{3}".'
                                'Elapsed:"{4}/{5}"'.format(volume_id,
                                                           instance_id,
                                                           vol.status,
                                                           attached_id,
                                                           elapsed,
-                                                          timeout_sec))
+                                                          timeout_sec), ATTACH_VOLUME_FAILURE)
 
 
 class EucaISConnection(object):
@@ -187,14 +188,16 @@ class EucaISConnection(object):
     Returns True if task should be canceled
     """
 
-    def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None):
-        if task_id == None or status == None:
+    def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None, error_code=None):
+        if task_id is None or status is None:
             raise RuntimeError("Invalid parameters")
         params = {'InstanceId': config.get_worker_id(), 'ImportTaskId': task_id, 'Status': status}
         if bytes_converted != None:
             params['BytesConverted'] = bytes_converted
-        if volume_id != None:
+        if volume_id is not None:
             params['VolumeId'] = volume_id
+        if error_code is not None:
+            params['ErrorCode'] = error_code
         resp = self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
         if resp.status != 200:
             raise httplib.HTTPException(resp.status, resp.reason, resp.read())
@@ -266,7 +269,7 @@ class EucaEuareConnection(IAMConnection):
         server_pk = result['euca:server_pk']
 
         if arn != cert_arn:
-            raise Exception("certificate ARN in the response is not valid")
+            raise FailureWithCode("certificate ARN in the response is not valid", CERTIFICATE_FAILURE)
         sig_payload = str(server_cert) + '&' + str(server_pk)
         sig = str(sig)
         # verify the signature to ensure the response came from EUARE
@@ -275,18 +278,18 @@ class EucaEuareConnection(IAMConnection):
         msg_digest = M2Crypto.EVP.MessageDigest('sha256')
         msg_digest.update(sig_payload)
         if verify_rsa.verify(msg_digest.digest(), sig.decode('base64'), 'sha256') != 1:
-            raise Exception("invalid signature from EUARE")
+            raise FailureWithCode("invalid signature from EUARE", CERTIFICATE_FAILURE)
 
         # prep symmetric keys
         parts = server_pk.split("\n")
-        if (len(parts) != 2):
-            raise Exception("invalid format of server private key")
+        if len(parts) != 2:
+            raise FailureWithCode("invalid format of server private key", CERTIFICATE_FAILURE)
         symm_key = parts[0]
         cipher = parts[1]
         try:
             raw_symm_key = rsa.private_decrypt(symm_key.decode('base64'), M2Crypto.RSA.pkcs1_padding)
         except Exception, err:
-            raise Exception("failed to decrypt symmetric key: " + str(err))
+            raise FailureWithCode("failed to decrypt symmetric key: " + str(err), CERTIFICATE_FAILURE)
         try:
             cipher = cipher.decode('base64')
             # prep iv and cipher text
@@ -299,7 +302,7 @@ class EucaEuareConnection(IAMConnection):
             txt = txt + cipher.final()
             s_cert = ServerCertificate(server_cert.decode('base64'), txt.decode('base64'))
         except Exception, err:
-            raise Exception("failed to decrypt the private key: " + str(err))
+            raise FailureWithCode("failed to decrypt the private key: " + str(err), CERTIFICATE_FAILURE)
 
         return s_cert
 

@@ -24,6 +24,8 @@ import traceback
 import worker
 from worker.ws import EucaISConnection
 from worker.imaging_task import ImagingTask
+from worker.failure_with_code import FailureWithCode
+from task_exit_codes import *
 
 
 class WorkerLoop(object):
@@ -56,12 +58,17 @@ class WorkerLoop(object):
                         if task.process_task():
                             worker.log.info('Done processing task %s' % task.task_id, task.task_id)
                         else:
-                            worker.log.warn('Processing of the task %s failed' % task.task_id, task.task_id)
+                            worker.log.error('Processing of the task %s failed' % task.task_id, task.task_id)
                     else:
                         pass
                 except Exception, err:
-                    con.put_import_task_status(task_id=import_task.task_id, status='FAILED')
-                    worker.log.error('Failed to process task for unknown reason: %s' % err)
+                    if type(err) is FailureWithCode:
+                        con.put_import_task_status(task_id=import_task.task_id, status='FAILED',
+                                                   error_code=err.failure_code)
+                    else:
+                        con.put_import_task_status(task_id=import_task.task_id, status='FAILED',
+                                                   error_code=GENERAL_FAILURE)
+                        worker.log.error('Failed to process task for unknown reason: %s' % err)
             except Exception, err:
                 tb = traceback.format_exc()
                 worker.log.error(str(tb) +
