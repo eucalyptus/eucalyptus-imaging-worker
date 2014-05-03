@@ -19,7 +19,8 @@
 CLEAN_UP_FAILURE = "CleanUpFailure"
 INPUT_DATA_FAILURE = "InvalidInputData"
 DOWNLOAD_DATA_FAILURE = "FailureToDownloadData"
-PROCESS_TASK__FAILURE = "FailureToProcessTask"
+# Euca-workflow failure
+WORKFLOW_FAILURE = "FailureToRunWorkflow"
 # Can't determine the reason
 GENERAL_FAILURE = "GeneralFailure"
 ATTACH_VOLUME_FAILURE = "FailureToAttachVolume"
