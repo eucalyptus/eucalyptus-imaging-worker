@@ -62,10 +62,7 @@ if config.get_log_server() is not None and config.get_log_server_port() is not N
     workflow_log.addHandler(remote_log_handler)
 
 
-# Log level will default to INFO
-# If you want more information (like DEBUG) you will have to set the log level
-def set_loglevel(lvl):
-    global log
+def get_log_level_as_num(lvl):
     lvl_num = None
     if isinstance(lvl, str):
         try:
@@ -75,9 +72,18 @@ def set_loglevel(lvl):
             return
     else:
         lvl_num = lvl
+    return lvl_num
 
-    log.setLevel(lvl_num)
-    workflow_log.setLevel(lvl_num)
+
+# Log level will default to INFO
+# If you want more information (like DEBUG) you will have to set the log level
+def set_loglevel(lvl):
+    log.setLevel(get_log_level_as_num(lvl))
+    workflow_log.setLevel(get_log_level_as_num(lvl))
+
+
+def set_boto_loglevel(lvl):
+    boto_log.setLevel(get_log_level_as_num(lvl))
 
 
 class CustomLog:

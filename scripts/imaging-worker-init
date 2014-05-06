@@ -36,12 +36,12 @@ PIDFILE=/var/run/eucalyptus-imaging-worker/worker.pid
 BOTO_CONFIG=/etc/eucalyptus-imaging-worker/boto.cfg
 SERVOUSER=imaging-worker
 LOGLEVEL=debug
-
+BOTO_LOGLEVEL=info
 LOCKFILE=/var/lock/subsys/eucalyptus-imaging-worker
 
 start() {
     echo -n $"Starting $SERVICE: "
-    daemon --user=$SERVOUSER --pidfile=$PIDFILE $PROCESS -d -p $PIDFILE -l $LOGLEVEL -b $BOTO_CONFIG
+    daemon --user=$SERVOUSER --pidfile=$PIDFILE $PROCESS -d -p $PIDFILE -l $LOGLEVEL -c $BOTO_CONFIG -b BOTO_LOGLEVEL
     RETVAL=$?
     echo
     [ $RETVAL -eq 0 ] && touch $LOCKFILE

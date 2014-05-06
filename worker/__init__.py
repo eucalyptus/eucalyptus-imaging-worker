@@ -20,7 +20,7 @@
 # Order matters here. We want to make sure we initialize logging before anything
 # else happens. We need to initialize the logger that boto will be using.
 #
-from worker.logutil import CustomLog, set_loglevel
+from worker.logutil import CustomLog, set_loglevel, set_boto_loglevel
 from worker.config import set_pidfile, set_boto_config
 from worker.main_loop import WorkerLoop
 import worker.config as config

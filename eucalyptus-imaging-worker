@@ -81,7 +81,7 @@ def cleanpid(signum=None, action=None):
 
 def usage():
     print """
-    %s [-d | --daemonize] [-p | --pidfile] [-l | --log-level] [-b | --boto-config]
+    %s [-d | --daemonize] [-p | --pidfile] [-l | --log-level]  [-b | --boto-log-level] [-c | --boto-config]
     """ % (os.path.basename(sys.argv[0]))
     sys.exit(1)
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             "--log-level",
             "--boto-config",
         ]
-        opts, _ = getopt.getopt(sys.argv[1:], "hdp:l:b:", longopts)
+        opts, _ = getopt.getopt(sys.argv[1:], "hdp:l:b:c:", longopts)
         for arg, value in opts:
             if arg == "-d" or arg == "--daemonize":
                 daemon = True
@@ -104,7 +104,9 @@ if __name__ == "__main__":
                 worker.set_pidfile(value)
             elif arg == "-l" or arg == "--log-level":
                 worker.set_loglevel(value)
-            elif arg == "-b" or arg == "--boto-config":
+            elif arg == "-b" or arg == "--boto-log-level":
+                worker.set_boto_loglevel(value)
+            elif arg == "-c" or arg == "--boto-config":
                 worker.set_boto_config(value)
             elif arg == "-h" or arg == "--help":
                 usage()
