@@ -77,7 +77,6 @@ def set_loglevel(lvl):
         lvl_num = lvl
 
     log.setLevel(lvl_num)
-    boto_log.setLevel(lvl_num)
     workflow_log.setLevel(lvl_num)
 
 
