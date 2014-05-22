@@ -17,8 +17,8 @@
 # additional information or have any questions.
 
 import logging
-import config
 import os
+import worker.config as config
 from logging.handlers import RotatingFileHandler
 from logging.handlers import SysLogHandler
 
@@ -53,14 +53,19 @@ log.addHandler(file_log_handler)
 boto_log.addHandler(file_log_handler)
 workflow_log.addHandler(file_log_handler)
 # remote handler
-if config.get_log_server() is not None and config.get_log_server_port() is not None:
+# config.query_user_data()
+remote_server = config.get_log_server()
+remote_port = config.get_log_server_port()
+if remote_server is not None and remote_port is not None:
     remote_formatter = logging.Formatter('imaging-worker ' + config.get_worker_id() + ' [%(levelname)s]:%(message)s')
-    remote_log_handler = SysLogHandler(address=(config.get_log_server(), config.get_log_server_port()),
+    remote_log_handler = SysLogHandler(address=(remote_server, remote_port),
                                        facility=SysLogHandler.LOG_DAEMON)
     remote_log_handler.setFormatter(remote_formatter)
     log.addHandler(remote_log_handler)
     workflow_log.addHandler(remote_log_handler)
-
+    log.info('Adder remote sys log handler')
+else:
+    log.warn('Remote sys log handler is not configured. Log server is set to %s with port %s ' % (remote_server, remote_port))
 
 def get_log_level_as_num(lvl):
     lvl_num = None

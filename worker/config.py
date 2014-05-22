@@ -84,10 +84,13 @@ def get_value(key, optional=False):
         return user_data_store[key]
     else:
         query_user_data()
-        if key not in user_data_store and not optional:
-            raise Exception('could not find %s' % key)
-        return None if optional else user_data_store[key]
-
+        if key in user_data_store:
+            return user_data_store[key]
+        else:
+            if not optional:
+                raise Exception('could not find %s' % key)
+            else:
+                return None
 
 def get_access_key_id():
     akey = get_provider().get_access_key()
