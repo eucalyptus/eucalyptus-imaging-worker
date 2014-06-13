@@ -96,7 +96,7 @@ if __name__ == "__main__":
             "--log-level",
             "--boto-config",
         ]
-        opts, _ = getopt.getopt(sys.argv[1:], "hdp:l:b:c:", longopts)
+        opts, _ = getopt.getopt(sys.argv[1:], "hdp:l:b:c:s:f:", longopts)
         for arg, value in opts:
             if arg == "-d" or arg == "--daemonize":
                 daemon = True
@@ -108,6 +108,10 @@ if __name__ == "__main__":
                 worker.set_boto_loglevel(value)
             elif arg == "-c" or arg == "--boto-config":
                 worker.set_boto_config(value)
+            elif arg == "-f":
+                worker.set_log_file_count(value)
+            elif arg == "-s":
+                worker.set_log_file_size(value)
             elif arg == "-h" or arg == "--help":
                 usage()
     except getopt.GetoptError:

@@ -95,7 +95,7 @@ class ImagingTask(object):
                 self.report_failed(self.task_thread.get_result())
                 return False
         else:
-            return False
+            return True
 
     def cancel(self):
         #set should_run=False (to stop the task thread)

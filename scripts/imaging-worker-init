@@ -38,10 +38,12 @@ SERVOUSER=imaging-worker
 LOGLEVEL=debug
 BOTO_LOGLEVEL=info
 LOCKFILE=/var/lock/subsys/eucalyptus-imaging-worker
+LOGFILE_SIZE=1048576
+LOGFILE_COUNT=5
 
 start() {
     echo -n $"Starting $SERVICE: "
-    daemon --user=$SERVOUSER --pidfile=$PIDFILE $PROCESS -d -p $PIDFILE -l $LOGLEVEL -c $BOTO_CONFIG -b $BOTO_LOGLEVEL
+    daemon --user=$SERVOUSER --pidfile=$PIDFILE $PROCESS -d -p $PIDFILE -l $LOGLEVEL -c $BOTO_CONFIG -b $BOTO_LOGLEVEL -s $LOGFILE_SIZE -f $LOGFILE_COUNT
     RETVAL=$?
     echo
     [ $RETVAL -eq 0 ] && touch $LOCKFILE
