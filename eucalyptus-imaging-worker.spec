@@ -6,10 +6,9 @@ Release:        0%{?build_id:.%build_id}%{?dist}
 Summary:        Configuration tool for the Eucalyptus Imaging Service
 
 Group:          Applications/System
-License:        GPLv3 
+License:        GPLv3
 URL:            http://www.eucalyptus.com
-Source0:        %{name}-%{version}.tar.gz
-BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+Source0:        %{tarball_basedir}.tar.xz
 
 BuildArch:      noarch
 
@@ -32,7 +31,7 @@ Requires(pre):  %{_sbindir}/useradd
 Configuration tool for the Eucalyptus Imaging Service
 
 %prep
-%setup -q -n %{name}-%{version}%{?tar_suffix}
+%setup -q -n %{tarball_basedir}
 
 %build
 # Build CLI tools
@@ -89,5 +88,9 @@ fi
 %config(noreplace) %{_sysconfdir}/%{name}/boto.cfg
 
 %changelog
-* Sat Feb 22 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 1.0.0-0
+* Tue Jul 22 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 0.0.1
+- Switched to monolithic source tarball naming
+- Switched to xz compression
+
+* Sat Feb 22 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 0.0.1
 - Initial build
