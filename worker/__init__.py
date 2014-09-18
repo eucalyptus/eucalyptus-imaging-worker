@@ -38,7 +38,7 @@ workflow_log = CustomLog('euca-workflow')
 
 def spin_locks():
     try:
-        while not ("/var/lib/eucalyptus-imaging-worker/ntp.lock"):
+        while not (os.path.exists("/var/lib/eucalyptus-imaging-worker/ntp.lock")):
             time.sleep(2)
             log.debug('waiting on ntp setup (reboot if continued)')
         os.remove("/var/lib/eucalyptus-imaging-worker/ntp.lock")
