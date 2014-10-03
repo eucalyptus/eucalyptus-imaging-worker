@@ -34,6 +34,7 @@ from lxml import objectify
 import worker.ssl
 from task_exit_codes import *
 from worker.failure_with_code import FailureWithCode
+from worker.floppy import FloppyCredential
 
 
 class TaskThread(threading.Thread):
@@ -132,6 +133,9 @@ class ImagingTask(object):
         if not import_task:
             return None
         task = None
+        f = FloppyCredential(task_id=import_task.task_id)
+        ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
+        worker.ssl.write_certificate(ec2_cert_path, f.get_cloud_cert())
         if import_task.task_type == "import_volume" and import_task.volume_task:
             volume_id = import_task.volume_task.volume_id
             manifests = import_task.volume_task.image_manifests
@@ -139,9 +143,6 @@ class ImagingTask(object):
             if manifests and len(manifests) > 0:
                 manifest_url = manifests[0].manifest_url
             task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id)
-            ec2_cert = import_task.volume_task.ec2_cert.decode('base64')
-            ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-            worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
         elif import_task.task_type == "convert_image" and import_task.instance_store_task:
             task = import_task.instance_store_task
             account_id = task.account_id
@@ -149,9 +150,6 @@ class ImagingTask(object):
             upload_policy = task.upload_policy
             upload_policy_signature = task.upload_policy_signature
             s3_url = task.s3_url
-            ec2_cert = task.ec2_cert.decode('base64')
-            ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-            worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
             import_images = task.import_images
             converted_image = task.converted_image
             bucket = converted_image.bucket

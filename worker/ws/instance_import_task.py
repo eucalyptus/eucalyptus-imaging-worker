@@ -44,7 +44,6 @@ class InstanceStoreTask(object):
         self.upload_policy = None
         self.upload_policy_signature = None
         self.s3_url = None
-        self.ec2_cert = None
         self.service_cert_arn = None
         self.import_images = []
         self.converted_image = None
@@ -70,8 +69,6 @@ class InstanceStoreTask(object):
             self.upload_policy_signature = value
         elif match_name('s3Url', name):
             self.s3_url = value
-        elif match_name('ec2Cert', name):
-            self.ec2_cert = value
         elif match_name('serviceCertArn', name):
             self.service_cert_arn = value
         else:
@@ -82,7 +79,6 @@ class VolumeTask(object):
     def __init__(self, parent=None):
         self.volume_id = None
         self.image_manifests = []
-        self.ec2_cert = None
 
     def startElement(self, name, attrs, connection):
         if match_name('imageManifestSet', name):
@@ -94,8 +90,6 @@ class VolumeTask(object):
     def endElement(self, name, value, connection):
         if match_name('volumeId', name):
             self.volume_id = value
-        elif match_name('ec2Cert', name):
-            self.ec2_cert = value
         else:
             setattr(self, name, value)
 
