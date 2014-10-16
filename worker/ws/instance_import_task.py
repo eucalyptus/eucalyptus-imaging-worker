@@ -79,6 +79,7 @@ class VolumeTask(object):
     def __init__(self, parent=None):
         self.volume_id = None
         self.image_manifests = []
+        self.format = None
 
     def startElement(self, name, attrs, connection):
         if match_name('imageManifestSet', name):
@@ -90,6 +91,8 @@ class VolumeTask(object):
     def endElement(self, name, value, connection):
         if match_name('volumeId', name):
             self.volume_id = value
+        elif match_name('format', name):
+            self.format = value
         else:
             setattr(self, name, value)
 
