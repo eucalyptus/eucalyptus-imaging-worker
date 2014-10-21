@@ -30,10 +30,12 @@ import traceback
 import httplib2
 import base64
 import threading
+import tempfile
 from lxml import objectify
 import worker.ssl
 from task_exit_codes import *
 from worker.failure_with_code import FailureWithCode
+from worker.floppy import FloppyCredential
 
 
 class TaskThread(threading.Thread):
@@ -53,6 +55,8 @@ class ImagingTask(object):
     FAILED_STATE = 'FAILED'
     DONE_STATE = 'DONE'
     EXTANT_STATE = 'EXTANT'
+    RAW_FORMAT = 'RAW'
+    VMDK_FORMAT = 'VMDK'
 
     EXTANT_STATUS_REPORT_INTERVAL = 30
 
@@ -72,6 +76,9 @@ class ImagingTask(object):
 
     def get_task_type(self):
         return self.task_type
+
+    def get_input_format(self):
+        return self.input_format
 
     def run_task(self):
         raise NotImplementedError()
@@ -132,16 +139,18 @@ class ImagingTask(object):
         if not import_task:
             return None
         task = None
+        f = FloppyCredential(task_id=import_task.task_id)
+        ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
+        worker.ssl.write_certificate(ec2_cert_path, f.get_cloud_cert())
         if import_task.task_type == "import_volume" and import_task.volume_task:
             volume_id = import_task.volume_task.volume_id
             manifests = import_task.volume_task.image_manifests
             manifest_url = None
+            image_format = None
             if manifests and len(manifests) > 0:
                 manifest_url = manifests[0].manifest_url
-            task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id)
-            ec2_cert = import_task.volume_task.ec2_cert.decode('base64')
-            ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-            worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
+                image_format = manifests[0].format
+            task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id, image_format)
         elif import_task.task_type == "convert_image" and import_task.instance_store_task:
             task = import_task.instance_store_task
             account_id = task.account_id
@@ -149,9 +158,6 @@ class ImagingTask(object):
             upload_policy = task.upload_policy
             upload_policy_signature = task.upload_policy_signature
             s3_url = task.s3_url
-            ec2_cert = task.ec2_cert.decode('base64')
-            ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-            worker.ssl.write_certificate(ec2_cert_path, ec2_cert)
             import_images = task.import_images
             converted_image = task.converted_image
             bucket = converted_image.bucket
@@ -170,7 +176,6 @@ class ImagingTask(object):
                                             ec2_cert_path=ec2_cert_path, service_key_path=service_key_path,
                                             import_images=import_images)
         return task
-
 
 class InstanceStoreImagingTask(ImagingTask):
     def __init__(self, task_id, bucket=None, prefix=None, architecture=None, owner_account_id=None,
@@ -293,7 +298,7 @@ class InstanceStoreImagingTask(ImagingTask):
 class VolumeImagingTask(ImagingTask):
     _GIG_ = 1073741824
 
-    def __init__(self, task_id, manifest_url=None, volume_id=None):
+    def __init__(self, task_id, manifest_url=None, volume_id=None, input_format=ImagingTask.RAW_FORMAT):
         ImagingTask.__init__(self, task_id, "import_volume")
         self.manifest_url = manifest_url
         self.ec2_conn = worker.ws.connect_ec2(
@@ -311,13 +316,14 @@ class VolumeImagingTask(ImagingTask):
         self.volume_attached_dev = None
         self.instance_id = config.get_worker_id()
         self.process = None
+        self.input_format = input_format
 
     def __repr__(self):
         return 'volume conversion task:%s' % self.task_id
 
     def __str__(self):
-        return ('Task: {0}, manifest url: {1}, volume id: {2}'
-                .format(self.task_id, self.manifest_url, self.volume.id))
+        return ('Task: {0}, manifest url: {1}, volume id: {2}, data format {3}'
+                .format(self.task_id, self.manifest_url, self.volume.id, self.input_format))
 
     def get_partition_size(self, partition):
         p = subprocess.Popen(["sudo", "blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
@@ -329,14 +335,6 @@ class VolumeImagingTask(ImagingTask):
         worker.log.debug('Setting permissions for %s' % partition)
         subprocess.call(["sudo", "chmod", "a+w", partition])
 
-    def get_manifest(self):
-        if "imaging@" not in self.manifest_url:
-            raise FailureWithCode('Invalid manifest URL', INPUT_DATA_FAILURE)
-        resp, content = httplib2.Http().request(self.manifest_url.replace('imaging@', ''))
-        if resp['status'] != '200' or len(content) <= 0:
-            raise FailureWithCode('Could not download the manifest file', DOWNLOAD_DATA_FAILURE)
-        root = objectify.XML(content)
-        return root
 
     def next_device_name(self, all_dev):
         device = all_dev[0]
@@ -453,22 +451,6 @@ class VolumeImagingTask(ImagingTask):
             raise ValueError('Device for volume: {0} could not be verfied'
                              ' against dev:{1}'.format(volume_id, blockdev))
 
-    # errors are catch by caller
-    def start_download_process(self, device_name):
-        manifest = self.manifest_url.replace('imaging@', '')
-        cloud_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-        params = ['/usr/libexec/eucalyptus/euca-run-workflow',
-                  'down-parts/write-raw',
-                  '--import-manifest-url', manifest,
-                  '--output-path', device_name,
-                  '--cloud-cert-path', cloud_cert_path]
-        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
-        # create process with system default buffer size and make its stderr non-blocking
-        self.process = subprocess.Popen(params, stderr=subprocess.PIPE)
-        fd = self.process.stderr
-        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-
     #TODO: Not in use, remove?
     def detach_volume(self, timeout_sec=3000, local_dev_timeout=30):
         worker.log.debug('Detaching volume %s' % self.volume.id, self.task_id)
@@ -513,18 +495,52 @@ class VolumeImagingTask(ImagingTask):
                 return False
         return True
 
+    def get_image_size_from_manifest(self):
+        if "imaging@" not in self.manifest_url:
+            raise FailureWithCode('Invalid manifest URL', INPUT_DATA_FAILURE)
+        resp, content = httplib2.Http().request(self.manifest_url.replace('imaging@', ''))
+        if resp['status'] != '200' or len(content) <= 0:
+            raise FailureWithCode('Could not download the manifest file', DOWNLOAD_DATA_FAILURE)
+        root = objectify.XML(content)
+        return int(root.image.size)
+
+    # errors are catch by caller
+    def start_download_process(self, manifest_url, device_name, validate_size=True):
+        manifest = manifest_url.replace('imaging@', '')
+        cloud_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
+        params = ['/usr/libexec/eucalyptus/euca-run-workflow',
+                  'down-parts/write-raw',
+                  '--import-manifest-url', manifest,
+                  '--output-path', device_name,
+                  '--cloud-cert-path', cloud_cert_path]
+        if not validate_size:
+            params.append('--skip-size-validation')
+        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
+        # create process with system default buffer size and make its stderr non-blocking
+        self.process = subprocess.Popen(params, stderr=subprocess.PIPE)
+        fd = self.process.stderr
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+    @staticmethod
+    def get_free_space_for_dir(dir_name):
+        df = subprocess.Popen(["df", dir_name], stdout=subprocess.PIPE)
+        output = df.communicate()[0]
+        device, size, used, available, percent, mountpoint = \
+            output.split("\n")[1].split()
+        return int(available) * 1024;
+
     def run_task(self):
         device_to_use = None
         try:
-            manifest = self.get_manifest()
-            image_size = int(manifest.image.size)
+            image_size = self.get_image_size_from_manifest()
             if self.volume is not None:
                 if long(int(self.volume.size) * self._GIG_) < image_size:
                     raise FailureWithCode('Volume:"{1}" size:"{1}" is too small '
-                                     'for image to be processed:"{2}"'
-                                     .format(self.volume.id,
-                                             self.volume.size,
-                                             image_size), INPUT_DATA_FAILURE)
+                                          'for image to be processed:"{2}"'
+                                          .format(self.volume.id,
+                                                  self.volume.size,
+                                                  image_size), INPUT_DATA_FAILURE)
                 if self.is_cancelled():
                     return TASK_CANCELED
                 worker.log.info('Attaching volume %s' % self.volume.id, self.task_id)
@@ -533,13 +549,30 @@ class VolumeImagingTask(ImagingTask):
                 device_size = self.get_partition_size(device_to_use)
                 worker.log.debug('Attached device size is %d bytes' % device_size, self.task_id)
                 worker.log.debug('Needed for image/volume %d bytes' % image_size, self.task_id)
+                download_file = None
                 if image_size > device_size:
                     raise FailureWithCode('Device is too small for the image/volume', INPUT_DATA_FAILURE)
                 try:
                     self.add_write_permission(device_to_use)
                     if self.is_cancelled():
                         return TASK_CANCELED
-                    self.start_download_process(device_to_use)
+
+                    if self.input_format == ImagingTask.RAW_FORMAT:
+                        self.start_download_process(self.manifest_url, device_to_use)
+                    elif self.input_format == ImagingTask.VMDK_FORMAT:
+                        # In the future a piping processing should be added, for now:
+                        # step 1. download file locally
+                        # step 2. convert into raw using qemu-img
+                        # step 3. move data to attached disk
+                        dir_size = VolumeImagingTask.get_free_space_for_dir('/mnt/imaging')
+                        #todo: find out if real compressed size can be obtained
+                        if dir_size < image_size * 1.2:
+                            raise FailureWithCode("There is not enough space at '/mnt/imaging' for VMDK image "
+                                                  "conversion", INPUT_DATA_FAILURE)
+                        download_file = tempfile.NamedTemporaryFile(dir='/mnt/imaging', delete=False)
+                        download_file.close()
+                        # download manifest for VMDK import has size for unpacked image, skipp size validation
+                        self.start_download_process(self.manifest_url, download_file.name, validate_size=False)
                 except Exception, err:
                     worker.log.error('Failure to start workflow process %s' % err)
                     return WORKFLOW_FAILURE
@@ -555,8 +588,35 @@ class VolumeImagingTask(ImagingTask):
                         worker.log.error('Process was killed')
                         return WORKFLOW_FAILURE
                 elif self.process.returncode != 0:
-                    worker.log.error('Return code from the workflow process is not 0. Code: %d' % self.process.returncode)
+                    worker.log.error('Return code from the workflow process is not 0. Code: %d'
+                                     % self.process.returncode)
                     return WORKFLOW_FAILURE
+
+                if self.input_format == ImagingTask.VMDK_FORMAT:
+                    try:
+                        raw_file_name = download_file.name + '.raw'
+                        params = ['qemu-img', 'convert', '-O', 'raw', download_file.name, raw_file_name]
+                        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
+                        df = subprocess.Popen(params, stdout=subprocess.PIPE)
+                        output = df.communicate()[0]
+                        if df.returncode != 0:
+                            worker.log.error('Failed to run VMDK conversion process: %s' % output)
+                            return WORKFLOW_FAILURE
+                        worker.log.debug("Removing tmp VMDK file")
+                        os.remove(download_file.name)
+                        params = ['dd', 'if=%s' % raw_file_name, 'of=%s' % device_to_use, 'bs=10M']
+                        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
+                        df = subprocess.Popen(params, stderr=subprocess.PIPE)
+                        output = df.communicate()[0]
+                        if df.returncode != 0:
+                            worker.log.error('Failed to move converted image to attached device %s' % output)
+                            return WORKFLOW_FAILURE
+                        worker.log.debug("Removing tmp RAW file")
+                        os.remove(raw_file_name)
+                    except Exception, err:
+                        worker.log.error('Failure to convert VMDK to RAW or transfer file to volume %s' % err)
+                        return WORKFLOW_FAILURE
+
             else:
                 worker.log.error('No volume id is found for import-volume task')
                 return INPUT_DATA_FAILURE
@@ -595,7 +655,8 @@ class VolumeImagingTask(ImagingTask):
                             "Download image subprocess reports invalid status. Output: %s. Error: %s" % (line, ex),
                             self.task_id)
                     if self.bytes_transferred:
-                        worker.log.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred), self.task_id)
+                        worker.log.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred),
+                                         self.task_id)
             except:
                 pass
 

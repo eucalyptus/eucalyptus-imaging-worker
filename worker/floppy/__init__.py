@@ -34,7 +34,7 @@ class FloppyCredential(object):
             f = open('%s/credential' % config.FLOPPY_MOUNT_DIR)
             cred = None
             if f:
-                cred = credential = json.load(f)
+                cred = json.load(f)
                 f.close()
             self.unmount_floppy()
             self.iam_pub_key = cred['iam_pub_key']
@@ -45,6 +45,8 @@ class FloppyCredential(object):
             self.instance_pk = self.instance_pk.strip().decode('base64')
             self.iam_token = cred['iam_token']
             self.iam_token = self.iam_token.strip()
+            self.euca_cert = cred['euca_pub_key']
+            self.euca_cert = self.euca_cert.strip().decode('base64')
         except IOError, err:
             worker.log.error('failed to read credential file on floppy: ' + str(err))
             raise Exception()
@@ -80,6 +82,9 @@ class FloppyCredential(object):
 
     def get_iam_pub_key(self):
         return self.iam_pub_key
+
+    def get_cloud_cert(self):
+        return self.euca_cert
 
     def get_instance_pub_key(self):
         return self.instance_pub_key

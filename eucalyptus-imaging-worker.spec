@@ -25,6 +25,7 @@ Requires:       python-m2ext
 Requires:       sudo
 Requires:       ntp
 Requires:       ntpdate
+Requires:       qemu-img
 Requires(pre):  %{_sbindir}/useradd
 
 %description
