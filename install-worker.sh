@@ -39,6 +39,5 @@ chmod 700 /etc/eucalyptus-imaging-worker
 
 # NTP cronjob
 install -p -m 755 -D scripts/worker-ntp-update /usr/libexec/eucalyptus-imaging-worker/ntp-update
-install -p -m 755 -D scripts/worker-dns-update /usr/libexec/eucalyptus-imaging-worker/dns-update
 install -p -m 0750 -D scripts/imaging-worker.cron /etc/cron.d/imaging-worker
 chmod 0640 /etc/cron.d/imaging-worker
