@@ -27,6 +27,9 @@ Requires:       ntp
 Requires:       ntpdate
 Requires:       qemu-img
 Requires(pre):  %{_sbindir}/useradd
+Requires(post): chkconfig
+Requires(preun): chkconfig
+Requires(preun): initscripts
 
 %description
 Configuration tool for the Eucalyptus Imaging Service
@@ -68,6 +71,15 @@ getent passwd imaging-worker >/dev/null || \
 # Stop running services for upgrade
 if [ "$1" = "2" ]; then
     /sbin/service imaging-worker stop 2>/dev/null || :
+fi
+
+%post
+/sbin/chkconfig --add <script>
+
+%preun
+if [ $1 -eq 0 ] ; then
+    /sbin/service <script> stop >/dev/null 2>&1
+    /sbin/chkconfig --del <script>
 fi
 
 %files
