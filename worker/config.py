@@ -129,6 +129,9 @@ def get_log_server_port():
     return int(val) if val is not None else None
 
 
+def get_ntp_server_url():
+    return get_value('ntp_server')
+
 __availability_zone = None
 
 
