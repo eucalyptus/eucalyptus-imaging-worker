@@ -70,16 +70,16 @@ getent passwd imaging-worker >/dev/null || \
 
 # Stop running services for upgrade
 if [ "$1" = "2" ]; then
-    /sbin/service imaging-worker stop 2>/dev/null || :
+    /sbin/service %{name} stop 2>/dev/null || :
 fi
 
 %post
-/sbin/chkconfig --add eucalyptus-imaging-worker
+/sbin/chkconfig --add %{name}
 
 %preun
 if [ $1 -eq 0 ] ; then
-    /sbin/service <script> stop >/dev/null 2>&1
-    /sbin/chkconfig --del eucalyptus-imaging-worker
+    /sbin/service %{name} stop >/dev/null 2>&1
+    /sbin/chkconfig --del %{name}
 fi
 
 %files
