@@ -78,26 +78,21 @@ def start_worker():
                 'ls -la /mnt > /dev/null', shell=True) != 0:
             log.error('failed to find %s or /mnt' % last_dev)
         else:
-            if run_as_sudo('mount | grep /mnt > /dev/null') == 1:
-                # try to mount first, there is a chance that system was restarted and
-                # last_dev was formatted and prep before
-                if run_as_sudo('mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
-                    if run_as_sudo('mkfs.ext3 -F %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo(
-                                    'mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
-                        log.error('failed to format and mount %s ' % last_dev)
-                    else:
-                        log.info('%s was successfully formatted and mounted to /mnt' % last_dev)
-                        if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
-                                'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
-                            log.error('could not create /mnt/imaging')
+            if run_as_sudo('mount %s /mnt 2>> /tmp/init.log' % last_dev) == 0:
+                if run_as_sudo('mkfs.ext3 -F %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo(
+                                'mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
+                    log.error('failed to format and mount %s ' % last_dev)
                 else:
-                    # make sure that /mnt/imaging exist and re-create it if needed
-                    if subprocess.call('ls -la /mnt/imaging > /dev/null', shell=True) != 0:
-                        if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
-                                'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
-                            log.error('could not create /mnt/imaging')
+                    log.info('%s was successfully formatted and mounted to /mnt' % last_dev)
+                    if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
+                            'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
+                        log.error('could not create /mnt/imaging')
             else:
-                log.info('%s is alredy mounted to /mnt' % last_dev)
+                # make sure that /mnt/imaging exist and re-create it if needed
+                if subprocess.call('ls -la /mnt/imaging > /dev/null', shell=True) != 0:
+                    if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
+                            'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
+                        log.error('could not create /mnt/imaging')
     except Exception, err:
         log.error("Can't detect VM's id or set up worker due to %s", err)
         sys.exit(1)
