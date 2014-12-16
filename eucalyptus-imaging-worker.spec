@@ -74,12 +74,12 @@ if [ "$1" = "2" ]; then
 fi
 
 %post
-/sbin/chkconfig --add <script>
+/sbin/chkconfig --add eucalyptus-imaging-worker
 
 %preun
 if [ $1 -eq 0 ] ; then
     /sbin/service <script> stop >/dev/null 2>&1
-    /sbin/chkconfig --del <script>
+    /sbin/chkconfig --del eucalyptus-imaging-worker
 fi
 
 %files
@@ -100,6 +100,9 @@ fi
 %config(noreplace) %{_sysconfdir}/%{name}/boto.cfg
 
 %changelog
+* Tue Dec 16 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 0.0.1
+- Added chkconfig changes
+
 * Tue Jul 22 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 0.0.1
 - Switched to monolithic source tarball naming
 - Switched to xz compression
