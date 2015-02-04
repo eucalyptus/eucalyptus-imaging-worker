@@ -23,6 +23,7 @@ from boto.resultset import ResultSet
 from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
 from boto.iam.connection import IAMConnection
+from boto.exception import BotoServerError
 from worker.ssl.server_cert import ServerCertificate
 from worker.ws.instance_import_task import InstanceImportTask
 import time
@@ -259,7 +260,11 @@ class EucaEuareConnection(IAMConnection):
                   'AuthSignature': auth_signature,
                   'Timestamp': timestamp,
                   'Signature': sig}
-        resp = self.get_response('DownloadServerCertificate', params)
+        try:
+            resp = self.get_response('DownloadServerCertificate', params)
+        except BotoServerError, err:
+            if err.status == 403:
+                raise FailureWithCode("Can't download certificate", CERTIFICATE_FAILURE)
         result = resp['euca:_download_server_certificate_response_type']['euca:download_server_certificate_result']
         if not result:
             return None
