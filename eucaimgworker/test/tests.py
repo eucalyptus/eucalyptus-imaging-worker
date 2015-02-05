@@ -1,6 +1,6 @@
-import worker
-import worker.config as config
-from worker.floppy import FloppyCredential
+import eucaimgworker
+import eucaimgworker.config as config
+from eucaimgworker.floppy import FloppyCredential
 
 
 def download_server_cert(cert_arn=None):
@@ -11,7 +11,7 @@ def download_server_cert(cert_arn=None):
         access_key_id = config.get_access_key_id()
         secret_access_key = config.get_secret_access_key()
         security_token = config.get_security_token()
-        con = worker.ws.connect_euare(aws_access_key_id=access_key_id,
+        con = eucaimgworker.ws.connect_euare(aws_access_key_id=access_key_id,
                                       aws_secret_access_key=secret_access_key, security_token=security_token)
         cert = con.download_server_certificate(f.get_instance_pub_key(), f.get_instance_pk(), f.get_iam_pub_key(),
                                                f.get_iam_token(), cert_arn)
@@ -31,7 +31,7 @@ def attach_volume(instance_id=None, volume_id=None, device_name='/dev/vdc'):
         access_key_id = config.get_access_key_id()
         secret_access_key = config.get_secret_access_key()
         security_token = config.get_security_token()
-        con = worker.ws.connect_ec2(aws_access_key_id=access_key_id,
+        con = eucaimgworker.ws.connect_ec2(aws_access_key_id=access_key_id,
                                     aws_secret_access_key=secret_access_key, security_token=security_token)
         con.attach_volume(volume_id, instance_id, device_name)
         print 'volume %s attached to instance %s at %s' % (volume_id, instance_id, device_name)
@@ -48,7 +48,7 @@ def detach_volume(volume_id=None):
         access_key_id = config.get_access_key_id()
         secret_access_key = config.get_secret_access_key()
         security_token = config.get_security_token()
-        con = worker.ws.connect_ec2(aws_access_key_id=access_key_id,
+        con = eucaimgworker.ws.connect_ec2(aws_access_key_id=access_key_id,
                                     aws_secret_access_key=secret_access_key, security_token=security_token)
         con.detach_volume(volume_id)
         print 'volume %s detached' % volume_id
@@ -64,7 +64,7 @@ def describe_volume(volume_id=None):
         access_key_id = config.get_access_key_id()
         secret_access_key = config.get_secret_access_key()
         security_token = config.get_security_token()
-        con = worker.ws.connect_ec2(aws_access_key_id=access_key_id,
+        con = eucaimgworker.ws.connect_ec2(aws_access_key_id=access_key_id,
                                     aws_secret_access_key=secret_access_key, security_token=security_token)
         volumes = con.describe_volumes([volume_id, 'verbose'])
         print 'describe-volumes: %s' % volumes

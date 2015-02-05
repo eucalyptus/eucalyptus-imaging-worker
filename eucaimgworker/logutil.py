@@ -18,7 +18,7 @@
 
 import logging
 import os
-import worker.config as config
+import eucaimgworker.config as config
 from logging.handlers import RotatingFileHandler
 from logging.handlers import SysLogHandler
 

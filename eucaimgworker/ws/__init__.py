@@ -24,16 +24,16 @@ from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
 from boto.iam.connection import IAMConnection
 from boto.exception import BotoServerError
-from worker.ssl.server_cert import ServerCertificate
-from worker.ws.instance_import_task import InstanceImportTask
+from eucaimgworker.ssl.server_cert import ServerCertificate
+from eucaimgworker.ws.instance_import_task import InstanceImportTask
 import time
 import M2Crypto
 from collections import Iterable
 from lxml import objectify
-import worker
-import worker.config as config
-from worker.task_exit_codes import *
-from worker.failure_with_code import FailureWithCode
+import eucaimgworker
+import eucaimgworker.config as config
+from eucaimgworker.task_exit_codes import *
+from eucaimgworker.failure_with_code import FailureWithCode
 
 def connect_euare(host_name=config.get_euare_service_url(), port=8773, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -106,7 +106,7 @@ class EucaEC2Connection(object):
         while elapsed < timeout_sec:
             vol = self.describe_volume(volume_id)
             if vol.status == 'available' or vol.status.startswith('delet'):
-                worker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
+                eucaimgworker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
                 return
             time.sleep(5)
             elapsed = time.time() - start

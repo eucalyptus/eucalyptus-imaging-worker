@@ -20,18 +20,18 @@
 # Order matters here. We want to make sure we initialize logging before anything
 # else happens. We need to initialize the logger that boto will be using.
 #
-from worker.logutil import CustomLog, set_loglevel, set_boto_loglevel, set_log_file_count, set_log_file_size
-from worker.config import set_pidfile, set_boto_config
-from worker.main_loop import WorkerLoop
-import worker.config as config
-import worker
+from eucaimgworker.logutil import CustomLog, set_loglevel, set_boto_loglevel, set_log_file_count, set_log_file_size
+from eucaimgworker.config import set_pidfile, set_boto_config
+from eucaimgworker.main_loop import WorkerLoop
+import eucaimgworker.config as config
+import eucaimgworker
 import os
 import subprocess
 import sys
 import re
 import time
 
-__version__ = '1.0.0-dev'
+__version__ = '0.1.1'
 Version = __version__
 log = CustomLog('worker')
 workflow_log = CustomLog('euca-workflow')
@@ -73,7 +73,7 @@ def start_worker():
             sys.exit(1)
         res.sort(reverse=True)
         last_dev = res[0]
-        worker.config.get_worker_id()
+        eucaimgworker.config.get_worker_id()
         if subprocess.call('ls -la %s > /dev/null' % last_dev, shell=True) != 0 or subprocess.call(
                 'ls -la /mnt > /dev/null', shell=True) != 0:
             log.error('failed to find %s or /mnt' % last_dev)
