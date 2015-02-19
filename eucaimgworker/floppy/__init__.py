@@ -20,8 +20,11 @@ import commands
 import os
 import json
 import eucaimgworker
+from eucaimgworker import LOGGER_NAME
+from eucaimgworker.logutil import CustomLog
 import eucaimgworker.config as config
 
+logger = CustomLog(LOGGER_NAME)
 
 class FloppyCredential(object):
     def __init__(self, task_id=None):
@@ -48,10 +51,10 @@ class FloppyCredential(object):
             self.euca_cert = cred['euca_pub_key']
             self.euca_cert = self.euca_cert.strip().decode('base64')
         except IOError, err:
-            eucaimgworker.log.error('failed to read credential file on floppy: ' + str(err))
+            logger.error('failed to read credential file on floppy: ' + str(err))
             raise Exception()
         except Exception, err:
-            eucaimgworker.log.error('failed to parse credential file: ' + str(err))
+            logger.error('failed to parse credential file: ' + str(err))
             raise Exception()
 
     @staticmethod
@@ -67,7 +70,7 @@ class FloppyCredential(object):
             os.makedirs(dir)
         cmd_line = 'sudo /bin/mount %s %s' % (dev, dir)
         if subprocess.call(cmd_line, shell=True) == 0:
-            eucaimgworker.log.debug('floppy disk mounted on ' + dir, process=self.task_id)
+            logger.debug('floppy disk mounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to mount floppy')
 
@@ -76,7 +79,7 @@ class FloppyCredential(object):
             return
         cmd_line = 'sudo /bin/umount %s' % dir
         if subprocess.call(cmd_line, shell=True) == 0:
-            eucaimgworker.log.debug('floppy disk unmounted on ' + dir, process=self.task_id)
+            logger.debug('floppy disk unmounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to unmount floppy')
 

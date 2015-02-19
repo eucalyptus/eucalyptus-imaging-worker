@@ -21,8 +21,13 @@
 import os
 import sys
 import getopt
+import logging
+from eucaimgworker import LOGGER_NAME
 import eucaimgworker
 import eucaimgworker.config as config
+from eucaimgworker.logutil import CustomLog, set_loglevel, set_boto_loglevel, set_log_file_count, set_log_file_size
+from eucaimgworker.config import set_pidfile, set_boto_config
+from eucaimgworker.main_loop import start_worker
 
 
 def daemonize(func=None):
@@ -70,7 +75,8 @@ def daemonize(func=None):
     atexit.register(cleanpid)
 
     if func:
-        eucaimgworker.log.info("Starting daemonized worker process")
+        logger = logging.getLogger(LOGGER_NAME)
+        logger.info("Starting daemonized worker process")
         func()
 
 
@@ -88,6 +94,7 @@ def usage():
 
 if __name__ == "__main__":
     daemon = False
+    log = CustomLog(LOGGER_NAME)
     try:
         longopts = [
             "--help",
@@ -101,28 +108,28 @@ if __name__ == "__main__":
             if arg == "-d" or arg == "--daemonize":
                 daemon = True
             elif arg == "-p" or arg == "--pidfile":
-                eucaimgworker.set_pidfile(value)
+                set_pidfile(value)
             elif arg == "-l" or arg == "--log-level":
-                eucaimgworker.set_loglevel(value)
+                set_loglevel(value)
             elif arg == "-b" or arg == "--boto-log-level":
-                eucaimgworker.set_boto_loglevel(value)
+                set_boto_loglevel(value)
             elif arg == "-c" or arg == "--boto-config":
-                eucaimgworker.set_boto_config(value)
+                set_boto_config(value)
             elif arg == "-f":
-                eucaimgworker.set_log_file_count(value)
+                set_log_file_count(value)
             elif arg == "-s":
-                eucaimgworker.set_log_file_size(value)
+                set_log_file_size(value)
             elif arg == "-h" or arg == "--help":
                 usage()
     except getopt.GetoptError:
         usage()
 
     if daemon:
-        daemonize(eucaimgworker.start_worker)
+        daemonize(start_worker)
     else:
         try:
-            eucaimgworker.log.info("Starting Imaging Service")
-            eucaimgworker.start_worker()
+            log.info("Starting Imaging Service")
+            start_worker()
         except KeyboardInterrupt:
-            eucaimgworker.log.info("Interrupted By User")
+            log.info("Interrupted By User")
             sys.exit(0)

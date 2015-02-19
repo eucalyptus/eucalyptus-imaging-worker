@@ -34,6 +34,10 @@ import eucaimgworker
 import eucaimgworker.config as config
 from eucaimgworker.task_exit_codes import *
 from eucaimgworker.failure_with_code import FailureWithCode
+from eucaimgworker.logutil import CustomLog
+from eucaimgworker import LOGGER_NAME
+
+logger = CustomLog(LOGGER_NAME)
 
 def connect_euare(host_name=config.get_euare_service_url(), port=8773, path="services/Euare", aws_access_key_id=None,
                   aws_secret_access_key=None, security_token=None, **kwargs):
@@ -106,7 +110,7 @@ class EucaEC2Connection(object):
         while elapsed < timeout_sec:
             vol = self.describe_volume(volume_id)
             if vol.status == 'available' or vol.status.startswith('delet'):
-                eucaimgworker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
+                logger.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
                 return
             time.sleep(5)
             elapsed = time.time() - start

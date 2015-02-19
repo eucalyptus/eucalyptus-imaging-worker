@@ -36,7 +36,11 @@ import eucaimgworker.ssl
 from task_exit_codes import *
 from eucaimgworker.failure_with_code import FailureWithCode
 from eucaimgworker.floppy import FloppyCredential
+from eucaimgworker.utils import get_block_devices
+from eucaimgworker.logutil import CustomLog
+from eucaimgworker import LOGGER_NAME
 
+logger = CustomLog(LOGGER_NAME)
 
 class TaskThread(threading.Thread):
     def __init__(self, function):
@@ -92,7 +96,7 @@ class ImagingTask(object):
         while self.task_thread.is_alive():
             time.sleep(self.EXTANT_STATUS_REPORT_INTERVAL)
             if not self.report_running():  # cancelled by imaging service
-                eucaimgworker.log.debug('task is cancelled by imaging service', self.task_id)
+                logger.debug('task is cancelled by imaging service', self.task_id)
                 self.cancel()
         if not self.is_cancelled():
             if self.task_thread.get_result() == TASK_DONE:
@@ -112,7 +116,7 @@ class ImagingTask(object):
         try:
             self.cancel_cleanup()  # any task specific cleanup
         except Exception, err:
-            eucaimgworker.log.warn('Failed to cleanup task after cancellation: %s' % err, self.task_id)
+            logger.warn('Failed to cleanup task after cancellation: %s' % err, self.task_id)
 
     def is_cancelled(self):
         return not self.should_run
@@ -249,17 +253,18 @@ class InstanceStoreImagingTask(ImagingTask):
                       '--upload-policy=' + self.s3_upload_policy,
                       '--upload-policy-signature=' + self.s3_upload_policy_signature,
                       '--cloud-cert-path=' + self.cloud_cert_path]
-            eucaimgworker.log.debug('Running %s' % ' '.join(params), self.task_id)
+            logger.debug('Running %s' % ' '.join(params), self.task_id)
             # create process with system default buffer size and make its stdout non-blocking
             self.process = subprocess.Popen(params, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             fd = self.process.stdout
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
             if not self.process:
-                eucaimgworker.log.error('Failed to start the workflow process')
+                logger.error('Failed to start the workflow process')
                 return WORKFLOW_FAILURE
             while not self.is_cancelled() and self.process.poll() is None:
-                # log stdout and stderr from euca-run-workflow into eucaimgworker.log
+                # log stdout and stderr from euca-run-workflow into logger
+                workflow_logger = CustomLog('euca-workflow')
                 try:
                     line = self.process.stdout.readline()
                     if line:
@@ -268,23 +273,23 @@ class InstanceStoreImagingTask(ImagingTask):
                         level = s[2] if len(s) > 3 else None
                         msg = string.join(s[3:])
                         if level in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
-                            f = getattr(eucaimgworker.workflow_log, level.lower())
+                            f = getattr(workflow_logger, level.lower())
                             f(msg, self.task_id)
                         else:
-                            eucaimgworker.workflow_log.info(line, self.task_id)
+                            workflow_logger.info(line, self.task_id)
                 except:
                     pass
             if self.process.returncode is not None and self.process.returncode == 0:
                 return TASK_DONE
             elif self.process.returncode is not None:
-                eucaimgworker.log.error('euca-run-workflow returned code: %d' % self.process.returncode, self.task_id)
+                logger.error('euca-run-workflow returned code: %d' % self.process.returncode, self.task_id)
                 return WORKFLOW_FAILURE
             else:
-                eucaimgworker.log.warn('euca-run-workflow has been killed', self.task_id)
+                logger.warn('euca-run-workflow has been killed', self.task_id)
                 return TASK_CANCELED
 
         except Exception, err:
-            eucaimgworker.log.error('Failed to process task: %s' % err, self.task_id)
+            logger.error('Failed to process task: %s' % err, self.task_id)
             if type(err) is FailureWithCode:
                 return err.failure_code
             else:
@@ -328,11 +333,11 @@ class VolumeImagingTask(ImagingTask):
     def get_partition_size(self, partition):
         p = subprocess.Popen(["sudo", "blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
         t = p.communicate()[0]
-        eucaimgworker.log.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition), self.task_id)
+        logger.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition), self.task_id)
         return int(t.rstrip('\n'))
 
     def add_write_permission(self, partition):
-        eucaimgworker.log.debug('Setting permissions for %s' % partition)
+        logger.debug('Setting permissions for %s' % partition)
         subprocess.call(["sudo", "chmod", "a+w", partition])
 
 
@@ -384,9 +389,9 @@ class VolumeImagingTask(ImagingTask):
         if not self.volume:
             raise FailureWithCode('This import does not have a volume', INPUT_DATA_FAILURE)
         instance_id = self.instance_id
-        devices_before = eucaimgworker.get_block_devices()
+        devices_before = get_block_devices()
         device_name = self.next_device_name(devices_before)
-        eucaimgworker.log.debug('Attaching volume {0} to {1} as {2}'.
+        logger.debug('Attaching volume {0} to {1} as {2}'.
                          format(self.volume.id, instance_id, device_name), self.task_id)
         self.ec2_conn.attach_volume_and_wait(self.volume.id,
                                              instance_id,
@@ -394,8 +399,8 @@ class VolumeImagingTask(ImagingTask):
         elapsed = 0
         start = time.time()
         while elapsed < local_dev_timeout and not new_device_name:
-            new_block_devices = eucaimgworker.get_block_devices()
-            eucaimgworker.log.debug('Waiting for local dev for volume: "{0}", '
+            new_block_devices = get_block_devices()
+            logger.debug('Waiting for local dev for volume: "{0}", '
                              'elapsed:{1}'.format(self.volume.id, elapsed), self.task_id)
             diff_list = list(set(new_block_devices) - set(devices_before))
             if diff_list:
@@ -443,7 +448,7 @@ class VolumeImagingTask(ImagingTask):
                 if serial.startswith(volume_id):
                     break
         if os.path.basename(blockdev) == devdir:
-            eucaimgworker.log.debug('Validated volume:"{0}" at dev:"{1}" '
+            logger.debug('Validated volume:"{0}" at dev:"{1}" '
                              'via serial number: '
                              .format(volume_id, blockdev), self.task_id)
             return
@@ -453,10 +458,10 @@ class VolumeImagingTask(ImagingTask):
 
     #TODO: Not in use, remove?
     def detach_volume(self, timeout_sec=3000, local_dev_timeout=30):
-        eucaimgworker.log.debug('Detaching volume %s' % self.volume.id, self.task_id)
+        logger.debug('Detaching volume %s' % self.volume.id, self.task_id)
         if self.volume is None:
             raise FailureWithCode('This import does not have volume id', INPUT_DATA_FAILURE)
-        devices_before = eucaimgworker.get_block_devices()
+        devices_before = get_block_devices()
         self.volume.update()
         # Do not attempt to detach a volume which is not attached/attaching, or
         # is not attached to this instance
@@ -477,7 +482,7 @@ class VolumeImagingTask(ImagingTask):
             start = time.time()
             devices_after = devices_before
             while elapsed < local_dev_timeout:
-                new_block_devices = eucaimgworker.get_block_devices()
+                new_block_devices = get_block_devices()
                 devices_after = list(set(devices_before) - set(new_block_devices))
                 if not self.volume_attached_dev in devices_after:
                     break
@@ -486,7 +491,7 @@ class VolumeImagingTask(ImagingTask):
                 elapsed = time.time() - start
             if self.volume_attached_dev in devices_after:
                 self.volume.update()
-                eucaimgworker.log.error('Volume:"{0}" state:"{1}". Local device:"{2}"'
+                logger.error('Volume:"{0}" state:"{1}". Local device:"{2}"'
                                  'found on guest after {3} seconds'
                                  .format(self.volume.id,
                                          self.volume.status,
@@ -515,7 +520,7 @@ class VolumeImagingTask(ImagingTask):
                   '--cloud-cert-path', cloud_cert_path]
         if not validate_size:
             params.append('--skip-size-validation')
-        eucaimgworker.log.debug('Running %s' % ' '.join(params), self.task_id)
+        logger.debug('Running %s' % ' '.join(params), self.task_id)
         # create process with system default buffer size and make its stderr non-blocking
         self.process = subprocess.Popen(params, stderr=subprocess.PIPE)
         fd = self.process.stderr
@@ -543,12 +548,12 @@ class VolumeImagingTask(ImagingTask):
                                                   image_size), INPUT_DATA_FAILURE)
                 if self.is_cancelled():
                     return TASK_CANCELED
-                eucaimgworker.log.info('Attaching volume %s' % self.volume.id, self.task_id)
+                logger.info('Attaching volume %s' % self.volume.id, self.task_id)
                 device_to_use = self.attach_volume()
-                eucaimgworker.log.debug('Using %s as destination' % device_to_use, self.task_id)
+                logger.debug('Using %s as destination' % device_to_use, self.task_id)
                 device_size = self.get_partition_size(device_to_use)
-                eucaimgworker.log.debug('Attached device size is %d bytes' % device_size, self.task_id)
-                eucaimgworker.log.debug('Needed for image/volume %d bytes' % image_size, self.task_id)
+                logger.debug('Attached device size is %d bytes' % device_size, self.task_id)
+                logger.debug('Needed for image/volume %d bytes' % image_size, self.task_id)
                 download_file = None
                 if image_size > device_size:
                     raise FailureWithCode('Device is too small for the image/volume', INPUT_DATA_FAILURE)
@@ -574,21 +579,21 @@ class VolumeImagingTask(ImagingTask):
                         # download manifest for VMDK import has size for unpacked image, skipp size validation
                         self.start_download_process(self.manifest_url, download_file.name, validate_size=False)
                 except Exception, err:
-                    eucaimgworker.log.error('Failure to start workflow process %s' % err)
+                    logger.error('Failure to start workflow process %s' % err)
                     return WORKFLOW_FAILURE
                 if self.process is not None:
                     self.wait_with_status(self.process)
                 else:
-                    eucaimgworker.log.error('Cannot start workflow process')
+                    logger.error('Cannot start workflow process')
                     return WORKFLOW_FAILURE
                 if self.process.returncode is None:
                     if self.is_cancelled():
                         return TASK_CANCELED
                     else:
-                        eucaimgworker.log.error('Process was killed')
+                        logger.error('Process was killed')
                         return WORKFLOW_FAILURE
                 elif self.process.returncode != 0:
-                    eucaimgworker.log.error('Return code from the workflow process is not 0. Code: %d'
+                    logger.error('Return code from the workflow process is not 0. Code: %d'
                                      % self.process.returncode)
                     return WORKFLOW_FAILURE
 
@@ -596,36 +601,36 @@ class VolumeImagingTask(ImagingTask):
                     try:
                         raw_file_name = download_file.name + '.raw'
                         params = ['qemu-img', 'convert', '-O', 'raw', download_file.name, raw_file_name]
-                        eucaimgworker.log.debug('Running %s' % ' '.join(params), self.task_id)
+                        logger.debug('Running %s' % ' '.join(params), self.task_id)
                         df = subprocess.Popen(params, stdout=subprocess.PIPE)
                         output = df.communicate()[0]
                         if df.returncode != 0:
-                            eucaimgworker.log.error('Failed to run VMDK conversion process: %s' % output)
+                            logger.error('Failed to run VMDK conversion process: %s' % output)
                             return WORKFLOW_FAILURE
-                        eucaimgworker.log.debug("Removing tmp VMDK file")
+                        logger.debug("Removing tmp VMDK file")
                         os.remove(download_file.name)
                         params = ['dd', 'if=%s' % raw_file_name, 'of=%s' % device_to_use, 'bs=10M']
-                        eucaimgworker.log.debug('Running %s' % ' '.join(params), self.task_id)
+                        logger.debug('Running %s' % ' '.join(params), self.task_id)
                         df = subprocess.Popen(params, stderr=subprocess.PIPE)
                         output = df.communicate()[0]
                         if df.returncode != 0:
-                            eucaimgworker.log.error('Failed to move converted image to attached device %s' % output)
+                            logger.error('Failed to move converted image to attached device %s' % output)
                             return WORKFLOW_FAILURE
-                        eucaimgworker.log.debug("Removing tmp RAW file")
+                        logger.debug("Removing tmp RAW file")
                         os.remove(raw_file_name)
                     except Exception, err:
-                        eucaimgworker.log.error('Failure to convert VMDK to RAW or transfer file to volume %s' % err)
+                        logger.error('Failure to convert VMDK to RAW or transfer file to volume %s' % err)
                         return WORKFLOW_FAILURE
 
             else:
-                eucaimgworker.log.error('No volume id is found for import-volume task')
+                logger.error('No volume id is found for import-volume task')
                 return INPUT_DATA_FAILURE
 
             return TASK_DONE
 
         except Exception, err:
             tb = traceback.format_exc()
-            eucaimgworker.log.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
+            logger.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
             if type(err) is FailureWithCode:
                 return err.failure_code
             else:
@@ -633,14 +638,14 @@ class VolumeImagingTask(ImagingTask):
 
         finally:
             if device_to_use is not None and self.volume_id:
-                eucaimgworker.log.info('Detaching volume %s' % self.volume_id, self.task_id)
+                logger.info('Detaching volume %s' % self.volume_id, self.task_id)
                 try:
                     self.ec2_conn.detach_volume_and_wait(volume_id=self.volume_id, task_id=self.task_id)
                 except Exception:
                     return DETACH_VOLUME_FAILURE
 
     def wait_with_status(self, process):
-        eucaimgworker.log.debug('Waiting for download process', self.task_id)
+        logger.debug('Waiting for download process', self.task_id)
         while not self.is_cancelled() and process.poll() is None:
             try:
                  # get bytes transferred
@@ -651,11 +656,11 @@ class VolumeImagingTask(ImagingTask):
                         res = json.loads(line)
                         self.bytes_transferred = res['status']['bytes_downloaded']
                     except Exception, ex:
-                        eucaimgworker.log.warn(
+                        logger.warn(
                             "Download image subprocess reports invalid status. Output: %s. Error: %s" % (line, ex),
                             self.task_id)
                     if self.bytes_transferred:
-                        eucaimgworker.log.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred),
+                        logger.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred),
                                          self.task_id)
             except:
                 pass

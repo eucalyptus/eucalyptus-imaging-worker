@@ -1,4 +1,4 @@
-# Copyright 2009-2014 Eucalyptus Systems, Inc.
+# Copyright 2009-2015 Eucalyptus Systems, Inc.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,21 @@
 # Order matters here. We want to make sure we initialize logging before anything
 # else happens. We need to initialize the logger that boto will be using.
 #
-__version__ = '0.1.1'
-Version = __version__
+import os
+import subprocess
+import sys
+import re
 
-LOGGER_NAME = 'worker'
+
+def get_block_devices():
+    ret_list = []
+    for filename in os.listdir('/dev'):
+        if any(filename.startswith(prefix) for prefix in ('sd', 'xvd', 'vd', 'xd')):
+            filename = re.sub('\d', '', filename)
+            if not '/dev/' + filename in ret_list:
+                ret_list.append('/dev/' + filename)
+    return ret_list
+
+
+def run_as_sudo(cmd):
+    return subprocess.call('sudo %s' % cmd, shell=True)

@@ -19,6 +19,7 @@
 import logging
 import os
 import eucaimgworker.config as config
+from eucaimgworker import LOGGER_NAME
 from logging.handlers import RotatingFileHandler
 from logging.handlers import SysLogHandler
 
@@ -39,7 +40,7 @@ class RestrictedPermissionRotatingFileHandler(RotatingFileHandler):
 LOG_FILE = '/var/log/eucalyptus-imaging-worker/worker.log'
 LOG_BYTES = 1024 * 1024  # 1MB
 
-log = logging.getLogger('worker')
+log = logging.getLogger(LOGGER_NAME)
 boto_log = logging.getLogger('boto')
 workflow_log = logging.getLogger('euca-workflow')
 log.setLevel(logging.INFO)
