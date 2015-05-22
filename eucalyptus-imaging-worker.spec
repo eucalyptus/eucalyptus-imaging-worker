@@ -19,9 +19,9 @@ Requires:       eucalyptus-imaging-toolkit
 Requires:       python%{?__python_ver}
 Requires:       python%{?__python_ver}-boto
 Requires:       python%{?__python_ver}-httplib2
-Requires:       python-lxml
 Requires:       python-requests
 Requires:       python-m2ext
+Requires:       python-defusedxml
 Requires:       sudo
 Requires:       ntp
 Requires:       ntpdate

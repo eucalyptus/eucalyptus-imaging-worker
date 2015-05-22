@@ -31,7 +31,7 @@ import httplib2
 import base64
 import threading
 import tempfile
-from lxml import objectify
+from defusedxml.ElementTree import fromstring
 import worker.ssl
 from task_exit_codes import *
 from worker.failure_with_code import FailureWithCode
@@ -322,7 +322,7 @@ class VolumeImagingTask(ImagingTask):
         return 'volume conversion task:%s' % self.task_id
 
     def __str__(self):
-        return ('Task: {0}, manifest url: {1}, volume id: {2}, data format {3}'
+        return ('Task: {0}, manifest url: {1}, volume id: {2}, data format: {3}'
                 .format(self.task_id, self.manifest_url, self.volume.id, self.input_format))
 
     def get_partition_size(self, partition):
@@ -501,8 +501,16 @@ class VolumeImagingTask(ImagingTask):
         resp, content = httplib2.Http().request(self.manifest_url.replace('imaging@', ''))
         if resp['status'] != '200' or len(content) <= 0:
             raise FailureWithCode('Could not download the manifest file', DOWNLOAD_DATA_FAILURE)
-        root = objectify.XML(content)
-        return int(root.image.size)
+        root = fromstring(content)
+        if len(root.getiterator('image')) == 1:
+            image_el = root.getiterator('image')[0]
+        else:
+            raise FailureWithCode('Could not process the manifest file', DOWNLOAD_DATA_FAILURE)
+        if len(image_el.getiterator('size')) == 1:
+            size_el = image_el.getiterator('size')[0]
+        else:
+            raise FailureWithCode('Could not process the manifest file', DOWNLOAD_DATA_FAILURE)
+        return int(size_el.text)
 
     # errors are catch by caller
     def start_download_process(self, manifest_url, device_name, validate_size=True):

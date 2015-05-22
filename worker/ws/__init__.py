@@ -19,7 +19,6 @@
 import boto
 import httplib
 import boto.utils
-from boto.resultset import ResultSet
 from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
 from boto.iam.connection import IAMConnection
@@ -27,8 +26,7 @@ from worker.ssl.server_cert import ServerCertificate
 from worker.ws.instance_import_task import InstanceImportTask
 import time
 import M2Crypto
-from collections import Iterable
-from lxml import objectify
+from defusedxml.ElementTree import fromstring
 import worker
 import worker.config as config
 from worker.task_exit_codes import *
@@ -185,7 +183,7 @@ class EucaISConnection(object):
 
     """
     Communicates conversion status to the server
-    Returns True if task should be canceled
+    Returns False if task should be canceled
     """
 
     def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None, error_code=None):
@@ -201,8 +199,10 @@ class EucaISConnection(object):
         resp = self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
         if resp.status != 200:
             raise httplib.HTTPException(resp.status, resp.reason, resp.read())
-        root = objectify.XML(resp.read())
-        return 'true' != root.cancelled.text if hasattr(root, 'cancelled') else True
+        response = resp.read()
+        root = fromstring(response)
+        cancelled = root.getchildren()[0] if len(root.getchildren()) == 1 else 'true'
+        return 'true' != cancelled.text
 
 class EucaEuareConnection(IAMConnection):
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
