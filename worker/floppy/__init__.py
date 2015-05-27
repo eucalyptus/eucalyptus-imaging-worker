@@ -15,8 +15,6 @@
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
-import subprocess
-import commands
 import os
 import json
 import worker
@@ -56,8 +54,7 @@ class FloppyCredential(object):
 
     @staticmethod
     def is_floppy_mounted(dev_str='/dev/fd0'):
-        cmd_line = 'sudo /bin/mount | grep %s > /dev/null' % dev_str
-        if subprocess.call(cmd_line, shell=True) == 0:
+        if worker.run_as_sudo_with_grep('/bin/mount', dev_str) == 0:
             return True
         else:
             return False
@@ -65,8 +62,7 @@ class FloppyCredential(object):
     def mount_floppy(self, dev='/dev/fd0', dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             os.makedirs(dir)
-        cmd_line = 'sudo /bin/mount %s %s' % (dev, dir)
-        if subprocess.call(cmd_line, shell=True) == 0:
+        if worker.run_as_sudo('/bin/mount %s %s' % (dev, dir)) == 0:
             worker.log.debug('floppy disk mounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to mount floppy')
@@ -74,8 +70,7 @@ class FloppyCredential(object):
     def unmount_floppy(self, dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             return
-        cmd_line = 'sudo /bin/umount %s' % dir
-        if subprocess.call(cmd_line, shell=True) == 0:
+        if worker.run_as_sudo('/bin/umount %s' % dir) == 0:
             worker.log.debug('floppy disk unmounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to unmount floppy')
@@ -93,4 +88,4 @@ class FloppyCredential(object):
         return self.instance_pk
 
     def get_iam_token(self):
-        return self.iam_token 
+        return self.iam_token

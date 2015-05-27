@@ -30,6 +30,7 @@ import subprocess
 import sys
 import re
 import time
+import shlex
 
 __version__ = '1.0.0-dev'
 Version = __version__
@@ -57,12 +58,34 @@ def get_block_devices():
 
 
 def run_as_sudo(cmd):
-    return subprocess.call('sudo %s' % cmd, shell=True)
+    return run('sudo %s' % cmd)
+
+
+def run_as_sudo_with_grep(cmd, grep):
+    return run_with_grep('sudo %s' % cmd, grep)
+
+
+def run(cmd):
+    p = subprocess.Popen(shlex.split(cmd), stderr=subprocess.PIPE)
+    output = p.communicate()
+    if p.returncode != 0:
+        log.debug(output)
+    return p.returncode
+
+
+def run_with_grep(cmd, grep):
+    proc1 = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
+    proc2 = subprocess.Popen(shlex.split('grep %s' % grep), stdin=proc1.stdout, stderr=subprocess.PIPE)
+    proc1.stdout.close()
+    output = proc2.communicate()
+    if proc2.returncode != 0:
+        log.debug(output)
+    return proc2.returncode
 
 
 def start_worker():
     spin_locks()
-    if run_as_sudo('modprobe floppy > /dev/null') != 0:
+    if run_as_sudo('modprobe floppy') != 0:
         log.error('failed to load floppy driver')
     try:
         res = get_block_devices()
@@ -73,25 +96,23 @@ def start_worker():
             sys.exit(1)
         res.sort(reverse=True)
         last_dev = res[0]
-        worker.config.get_worker_id()
-        if subprocess.call('ls -la %s > /dev/null' % last_dev, shell=True) != 0 or subprocess.call(
-                'ls -la /mnt > /dev/null', shell=True) != 0:
+        if run('ls -la %s' % last_dev) != 0 or run('ls -la /mnt') != 0:
             log.error('failed to find %s or /mnt' % last_dev)
         else:
-            if run_as_sudo('mount %s /mnt 2>> /tmp/init.log' % last_dev) == 0:
-                if run_as_sudo('mkfs.ext3 -F %s 2>> /tmp/init.log' % last_dev) != 0 or run_as_sudo(
-                                'mount %s /mnt 2>> /tmp/init.log' % last_dev) != 0:
+            if run_as_sudo_with_grep('mount', '/mnt') == 1:
+                # /mnt is not mounted
+                if run_as_sudo('mkfs.ext3 -F %s' % last_dev) != 0 or run_as_sudo('mount %s /mnt' % last_dev) != 0:
                     log.error('failed to format and mount %s ' % last_dev)
                 else:
                     log.info('%s was successfully formatted and mounted to /mnt' % last_dev)
-                    if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
-                            'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
+                    if run_as_sudo('mkdir /mnt/imaging') != 0 or run_as_sudo(
+                            'chown imaging-worker:imaging-worker /mnt/imaging') != 0:
                         log.error('could not create /mnt/imaging')
             else:
                 # make sure that /mnt/imaging exist and re-create it if needed
-                if subprocess.call('ls -la /mnt/imaging > /dev/null', shell=True) != 0:
-                    if run_as_sudo('mkdir /mnt/imaging %s 2>> /tmp/init.log') != 0 or run_as_sudo(
-                            'chown imaging-worker:imaging-worker /mnt/imaging 2>> /tmp/init.log') != 0:
+                if run('ls -la /mnt/imaging') != 0:
+                    if run_as_sudo('mkdir /mnt/imaging') != 0 or run_as_sudo(
+                            'chown imaging-worker:imaging-worker /mnt/imaging') != 0:
                         log.error('could not create /mnt/imaging')
     except Exception, err:
         log.error("Can't detect VM's id or set up worker due to %s", err)
