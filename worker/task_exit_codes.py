@@ -18,6 +18,7 @@
 
 CLEAN_UP_FAILURE = "CleanUpFailure"
 INPUT_DATA_FAILURE = "InvalidInputData"
+INSUFFICIENT_DISK_SIZE = "InsufficientDiskSize"
 DOWNLOAD_DATA_FAILURE = "FailureToDownloadData"
 # Euca-workflow failure
 WORKFLOW_FAILURE = "FailureToRunWorkflow"

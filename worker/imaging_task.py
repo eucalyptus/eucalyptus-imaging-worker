@@ -95,11 +95,12 @@ class ImagingTask(object):
                 worker.log.debug('task is cancelled by imaging service', self.task_id)
                 self.cancel()
         if not self.is_cancelled():
-            if self.task_thread.get_result() == TASK_DONE:
+            run_result = self.task_thread.get_result()
+            if run_result['code'] == TASK_DONE:
                 self.report_done()
                 return True
             else:
-                self.report_failed(self.task_thread.get_result())
+                self.report_failed(run_result)
                 return False
         else:
             return True
@@ -125,9 +126,10 @@ class ImagingTask(object):
         self.is_conn.put_import_task_status(self.task_id, ImagingTask.DONE_STATE, self.volume_id,
                                             self.bytes_transferred)
 
-    def report_failed(self, error_code):
+    def report_failed(self, run_result):
         self.is_conn.put_import_task_status(self.task_id, ImagingTask.FAILED_STATE, self.volume_id,
-                                            self.bytes_transferred, error_code)
+                                            self.bytes_transferred, run_result['code'],
+                                            run_result['message'] if 'message' in run_result else None)
 
     """
     param: instance_import_task (object representing ImagingService's message)
@@ -257,7 +259,7 @@ class InstanceStoreImagingTask(ImagingTask):
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
             if not self.process:
                 worker.log.error('Failed to start the workflow process')
-                return WORKFLOW_FAILURE
+                return {'code': WORKFLOW_FAILURE}
             while not self.is_cancelled() and self.process.poll() is None:
                 # log stdout and stderr from euca-run-workflow into worker.log
                 try:
@@ -275,20 +277,20 @@ class InstanceStoreImagingTask(ImagingTask):
                 except:
                     pass
             if self.process.returncode is not None and self.process.returncode == 0:
-                return TASK_DONE
+                return {'code': TASK_DONE}
             elif self.process.returncode is not None:
                 worker.log.error('euca-run-workflow returned code: %d' % self.process.returncode, self.task_id)
-                return WORKFLOW_FAILURE
+                return {'code': WORKFLOW_FAILURE}
             else:
                 worker.log.warn('euca-run-workflow has been killed', self.task_id)
-                return TASK_CANCELED
+                return {'code': TASK_CANCELED}
 
         except Exception, err:
             worker.log.error('Failed to process task: %s' % err, self.task_id)
             if type(err) is FailureWithCode:
-                return err.failure_code
+                return {'code': err.failure_code, 'message': err.message}
             else:
-                return GENERAL_FAILURE
+                return {'code': GENERAL_FAILURE}
 
     # don't catch exceptions since they should be catch by the caller
     def cancel_cleanup(self):
@@ -550,7 +552,7 @@ class VolumeImagingTask(ImagingTask):
                                                   self.volume.size,
                                                   image_size), INPUT_DATA_FAILURE)
                 if self.is_cancelled():
-                    return TASK_CANCELED
+                    return {'code': TASK_CANCELED}
                 worker.log.info('Attaching volume %s' % self.volume.id, self.task_id)
                 device_to_use = self.attach_volume()
                 worker.log.debug('Using %s as destination' % device_to_use, self.task_id)
@@ -563,7 +565,7 @@ class VolumeImagingTask(ImagingTask):
                 try:
                     self.add_write_permission(device_to_use)
                     if self.is_cancelled():
-                        return TASK_CANCELED
+                        return {'code': TASK_CANCELED}
 
                     if self.input_format == ImagingTask.RAW_FORMAT:
                         self.start_download_process(self.manifest_url, device_to_use)
@@ -575,30 +577,30 @@ class VolumeImagingTask(ImagingTask):
                         dir_size = VolumeImagingTask.get_free_space_for_dir('/mnt/imaging')
                         #todo: find out if real compressed size can be obtained
                         if dir_size < image_size * 1.2:
-                            raise FailureWithCode("There is not enough space at '/mnt/imaging' for VMDK image "
-                                                  "conversion", INPUT_DATA_FAILURE)
+                            raise FailureWithCode("There is not enough space at for VMDK image "
+                                                  "conversion", INSUFFICIENT_DISK_SIZE)
                         download_file = tempfile.NamedTemporaryFile(dir='/mnt/imaging', delete=False)
                         download_file.close()
                         # download manifest for VMDK import has size for unpacked image, skipp size validation
                         self.start_download_process(self.manifest_url, download_file.name, validate_size=False)
                 except Exception, err:
                     worker.log.error('Failure to start workflow process %s' % err)
-                    return WORKFLOW_FAILURE
+                    return {'code': err.failure_code, 'message': err.message}
                 if self.process is not None:
                     self.wait_with_status(self.process)
                 else:
                     worker.log.error('Cannot start workflow process')
-                    return WORKFLOW_FAILURE
+                    return {'code': WORKFLOW_FAILURE}
                 if self.process.returncode is None:
                     if self.is_cancelled():
-                        return TASK_CANCELED
+                        return {'code': TASK_CANCELED}
                     else:
                         worker.log.error('Process was killed')
-                        return WORKFLOW_FAILURE
+                        return {'code': WORKFLOW_FAILURE}
                 elif self.process.returncode != 0:
                     worker.log.error('Return code from the workflow process is not 0. Code: %d'
                                      % self.process.returncode)
-                    return WORKFLOW_FAILURE
+                    return {'code': WORKFLOW_FAILURE}
 
                 if self.input_format == ImagingTask.VMDK_FORMAT:
                     try:
@@ -609,7 +611,7 @@ class VolumeImagingTask(ImagingTask):
                         output = df.communicate()[0]
                         if df.returncode != 0:
                             worker.log.error('Failed to run VMDK conversion process: %s' % output)
-                            return WORKFLOW_FAILURE
+                            return {'code': WORKFLOW_FAILURE}
                         worker.log.debug("Removing tmp VMDK file")
                         os.remove(download_file.name)
                         params = ['dd', 'if=%s' % raw_file_name, 'of=%s' % device_to_use, 'bs=10M']
@@ -618,26 +620,26 @@ class VolumeImagingTask(ImagingTask):
                         output = df.communicate()[0]
                         if df.returncode != 0:
                             worker.log.error('Failed to move converted image to attached device %s' % output)
-                            return WORKFLOW_FAILURE
+                            return {'code': WORKFLOW_FAILURE}
                         worker.log.debug("Removing tmp RAW file")
                         os.remove(raw_file_name)
                     except Exception, err:
                         worker.log.error('Failure to convert VMDK to RAW or transfer file to volume %s' % err)
-                        return WORKFLOW_FAILURE
+                        return {'code': WORKFLOW_FAILURE}
 
             else:
                 worker.log.error('No volume id is found for import-volume task')
-                return INPUT_DATA_FAILURE
+                return {'code': INPUT_DATA_FAILURE }
 
-            return TASK_DONE
+            return {'code': TASK_DONE}
 
         except Exception, err:
             tb = traceback.format_exc()
             worker.log.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
             if type(err) is FailureWithCode:
-                return err.failure_code
+                return {'code': err.failure_code, 'message': err.message}
             else:
-                return GENERAL_FAILURE
+                return {'code': GENERAL_FAILURE}
 
         finally:
             if device_to_use is not None and self.volume_id:
@@ -645,7 +647,7 @@ class VolumeImagingTask(ImagingTask):
                 try:
                     self.ec2_conn.detach_volume_and_wait(volume_id=self.volume_id, task_id=self.task_id)
                 except Exception:
-                    return DETACH_VOLUME_FAILURE
+                    return {'code': DETACH_VOLUME_FAILURE}
 
     def wait_with_status(self, process):
         worker.log.debug('Waiting for download process', self.task_id)

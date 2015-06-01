@@ -186,16 +186,19 @@ class EucaISConnection(object):
     Returns False if task should be canceled
     """
 
-    def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None, error_code=None):
+    def put_import_task_status(self, task_id=None, status=None, volume_id=None, bytes_converted=None, error_code=None,
+                               message=None):
         if task_id is None or status is None:
             raise RuntimeError("Invalid parameters")
         params = {'InstanceId': config.get_worker_id(), 'ImportTaskId': task_id, 'Status': status}
-        if bytes_converted != None:
+        if bytes_converted is not None:
             params['BytesConverted'] = bytes_converted
         if volume_id is not None:
             params['VolumeId'] = volume_id
         if error_code is not None:
             params['ErrorCode'] = error_code
+        if message is not None:
+            params['Message'] = message
         resp = self.conn.make_request('PutInstanceImportTaskStatus', params, path='/', verb='POST')
         if resp.status != 200:
             raise httplib.HTTPException(resp.status, resp.reason, resp.read())
