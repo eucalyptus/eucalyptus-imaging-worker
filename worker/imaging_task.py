@@ -15,10 +15,11 @@
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
-import tempfile
 import time
 import json
 import os
+import glob
+import shutil
 import fcntl
 import re
 import requests
@@ -86,7 +87,15 @@ class ImagingTask(object):
     def cancel_cleanup(self):
         raise NotImplementedError()
 
+    def prepare(self):
+        try:
+            for f in glob.iglob('/mnt/imaging/*'):
+                os.remove(f) if os.path.isfile(f) else shutil.rmtree(f)
+        except Exception, err:
+            worker.log.error("Can't clean up /mnt/imaging/ due to {0}".format(str(err)))
+
     def process_task(self):
+        self.prepare()
         self.task_thread = TaskThread(self.run_task)
         self.task_thread.start()
         while self.task_thread.is_alive():
