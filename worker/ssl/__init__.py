@@ -17,10 +17,6 @@
 # additional information or have any questions.
 
 import os
-from worker.floppy import FloppyCredential
-import worker.ws
-import worker.config as config
-
 
 def write_certificate(cert_file, cert_pem):
     if not os.path.exists(cert_file):
@@ -28,14 +24,3 @@ def write_certificate(cert_file, cert_pem):
         f_cert.write(cert_pem)
         f_cert.close()
         os.chmod(cert_file, 0400)
-
-def download_server_certificate(cert_arn, task_id=None):
-    f = FloppyCredential(task_id=task_id)
-    access_key_id = config.get_access_key_id()
-    secret_access_key = config.get_secret_access_key()
-    security_token = config.get_security_token()
-    con = worker.ws.connect_euare(aws_access_key_id=access_key_id,
-                                  aws_secret_access_key=secret_access_key, security_token=security_token)
-    cert = con.download_server_certificate(f.get_instance_pub_key(), f.get_instance_pk(), f.get_iam_pub_key(),
-                                           f.get_iam_token(), cert_arn)
-    return cert 

@@ -1,6 +1,4 @@
 from boto.resultset import ResultSet
-import worker
-
 
 def match_name(name, param):
     if name == param or 'euca:%s' % name == param:

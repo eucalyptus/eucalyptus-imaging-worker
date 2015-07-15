@@ -1,27 +1,5 @@
 import worker
 import worker.config as config
-from worker.floppy import FloppyCredential
-
-
-def download_server_cert(cert_arn=None):
-    if not cert_arn:
-        cert_arn = "arn:aws:iam::965529822009:server-certificate/ImagingCert-imgworker"
-    try:
-        f = FloppyCredential()
-        access_key_id = config.get_access_key_id()
-        secret_access_key = config.get_secret_access_key()
-        security_token = config.get_security_token()
-        con = worker.ws.connect_euare(aws_access_key_id=access_key_id,
-                                      aws_secret_access_key=secret_access_key, security_token=security_token)
-        cert = con.download_server_certificate(f.get_instance_pub_key(), f.get_instance_pk(), f.get_iam_pub_key(),
-                                               f.get_iam_token(), cert_arn)
-        print '%s\n%s' % (cert.get_certificate(), cert.get_private_key())
-
-        return cert;
-    except Exception, err:
-        print 'failed to download the server certificate: %s' % err
-        return
-
 
 def attach_volume(instance_id=None, volume_id=None, device_name='/dev/vdc'):
     if not volume_id or not instance_id:

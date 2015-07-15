@@ -25,11 +25,9 @@ import re
 import requests
 import config
 import worker
-import string
 import subprocess
 import traceback
 import httplib2
-import base64
 import threading
 import tempfile
 from defusedxml.ElementTree import fromstring
@@ -162,149 +160,7 @@ class ImagingTask(object):
                 manifest_url = manifests[0].manifest_url
                 image_format = manifests[0].format
             task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id, image_format)
-        elif import_task.task_type == "convert_image" and import_task.instance_store_task:
-            task = import_task.instance_store_task
-            account_id = task.account_id
-            access_key = task.access_key
-            upload_policy = task.upload_policy
-            upload_policy_signature = task.upload_policy_signature
-            s3_url = task.s3_url
-            import_images = task.import_images
-            converted_image = task.converted_image
-            bucket = converted_image.bucket
-            prefix = converted_image.prefix
-            architecture = converted_image.architecture
-            service_key_path = '%s/node-pk.pem' % config.RUN_ROOT
-            service_cert_path = '%s/node-cert.pem' % config.RUN_ROOT
-            cert_arn = str(task.service_cert_arn)
-            cert = worker.ssl.download_server_certificate(cert_arn, task_id=import_task.task_id)
-            worker.ssl.write_certificate(service_key_path, cert.get_private_key())
-            worker.ssl.write_certificate(service_cert_path, cert.get_certificate())
-            task = InstanceStoreImagingTask(import_task.task_id, bucket=bucket, prefix=prefix,
-                                            architecture=architecture, owner_account_id=account_id,
-                                            owner_access_key=access_key, s3_upload_policy=upload_policy,
-                                            s3_upload_policy_signature=upload_policy_signature, s3_url=s3_url,
-                                            ec2_cert_path=ec2_cert_path, service_key_path=service_key_path,
-                                            import_images=import_images)
         return task
-
-class InstanceStoreImagingTask(ImagingTask):
-    def __init__(self, task_id, bucket=None, prefix=None, architecture=None, owner_account_id=None,
-                 owner_access_key=None, s3_upload_policy=None, s3_upload_policy_signature=None, s3_url=None,
-                 ec2_cert_path=None, service_key_path=None, import_images=[]):
-        ImagingTask.__init__(self, task_id, "convert_image")
-        self.bucket = bucket
-        self.prefix = prefix
-        self.architecture = architecture
-        self.owner_account_id = owner_account_id
-        self.owner_access_key = owner_access_key
-        self.s3_upload_policy = base64.b64decode(s3_upload_policy)
-        self.s3_upload_policy_signature = s3_upload_policy_signature
-        self.s3_url = s3_url
-        self.ec2_cert_path = ec2_cert_path
-        self.cloud_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-        self.service_key_path = service_key_path
-
-        # list of image manifests that will be the sources of conversion
-        # see worker/ws/instance_import_task::ImportImage
-        # [{'id':'eki-xxxx', 'download_manifest_url':'http://..../vmlinuz.manifest.xml', 'format':'KERNEL'},
-        #  {'id':'eri-xxxx', 'download_manifest_url':'http://.../initrd.manifest.xml','format':'RAMDISK'}
-        #  {'id':'emi-xxxx', 'download_manifest_url':'http://.../centos.manifest.xml','format':'PARTITION'}
-        self.import_images = import_images
-        self.process = None
-
-    def __repr__(self):
-        return 'instance-store conversion task:%s' % self.task_id
-
-    def __str__(self):
-        manifest_str = ''
-        for manifest in self.import_images:
-            manifest_str = manifest_str + '\n' + str(manifest)
-        return 'instance-store conversion task - id: %s, bucket: %s, prefix: %s, manifests: %s' % (
-            self.task_id, self.bucket, self.prefix, manifest_str)
-
-    def get_image(self, val):
-        for image in self.import_images:
-            if image.format == val:
-                return image
-
-    @staticmethod
-    def get_manifest_url(url_string):
-        if "imaging@" not in url_string:
-            raise FailureWithCode('invalid manifest URL', INPUT_DATA_FAILURE)
-        return url_string
-
-    def run_task(self):
-        try:
-            params = ['/usr/libexec/eucalyptus/euca-run-workflow',
-                      'down-bundle-fs/up-bundle',
-                      "--image-manifest-url=%s" % self.get_manifest_url(
-                          self.get_image('PARTITION').download_manifest_url),
-                      "--kernel-manifest-url=%s" % self.get_manifest_url(
-                          self.get_image('KERNEL').download_manifest_url),
-                      "--ramdisk-manifest-url=%s" % self.get_manifest_url(
-                          self.get_image('RAMDISK').download_manifest_url),
-                      '--emi=' + self.get_image('PARTITION').id,
-                      '--eki=' + self.get_image('KERNEL').id,
-                      '--eri=' + self.get_image('RAMDISK').id,
-                      '--decryption-key-path=' + self.service_key_path,
-                      '--encryption-cert-path=' + self.ec2_cert_path,
-                      '--signing-key-path=' + self.service_key_path,
-                      '--prefix=' + self.prefix,
-                      '--bucket=' + self.bucket,
-                      '--work-dir=/mnt/imaging',
-                      '--arch=' + self.architecture,
-                      '--account=' + self.owner_account_id,
-                      '--access-key=' + self.owner_access_key,
-                      '--object-store-url=' + self.s3_url,
-                      '--upload-policy=' + self.s3_upload_policy,
-                      '--upload-policy-signature=' + self.s3_upload_policy_signature,
-                      '--cloud-cert-path=' + self.cloud_cert_path]
-            worker.log.debug('Running %s' % ' '.join(params), self.task_id)
-            # create process with system default buffer size and make its stdout non-blocking
-            self.process = subprocess.Popen(params, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            fd = self.process.stdout
-            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-            if not self.process:
-                worker.log.error('Failed to start the workflow process')
-                return {'code': WORKFLOW_FAILURE}
-            while not self.is_cancelled() and self.process.poll() is None:
-                # log stdout and stderr from euca-run-workflow into worker.log
-                try:
-                    line = self.process.stdout.readline()
-                    if line:
-                        line = line.strip()
-                        s = filter(None, line.split(' '))
-                        level = s[2] if len(s) > 3 else None
-                        msg = string.join(s[3:])
-                        if level in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
-                            f = getattr(worker.workflow_log, level.lower())
-                            f(msg, self.task_id)
-                        else:
-                            worker.workflow_log.info(line, self.task_id)
-                except:
-                    pass
-            if self.process.returncode is not None and self.process.returncode == 0:
-                return {'code': TASK_DONE}
-            elif self.process.returncode is not None:
-                worker.log.error('euca-run-workflow returned code: %d' % self.process.returncode, self.task_id)
-                return {'code': WORKFLOW_FAILURE}
-            else:
-                worker.log.warn('euca-run-workflow has been killed', self.task_id)
-                return {'code': TASK_CANCELED}
-
-        except Exception, err:
-            worker.log.error('Failed to process task: %s' % err, self.task_id)
-            if type(err) is FailureWithCode:
-                return {'code': err.failure_code, 'message': err.message}
-            else:
-                return {'code': GENERAL_FAILURE}
-
-    # don't catch exceptions since they should be catch by the caller
-    def cancel_cleanup(self):
-        if self.process and self.process.poll() is None:
-            self.process.kill()
 
 class VolumeImagingTask(ImagingTask):
     _GIG_ = 1073741824
@@ -461,50 +317,6 @@ class VolumeImagingTask(ImagingTask):
         else:
             raise ValueError('Device for volume: {0} could not be verfied'
                              ' against dev:{1}'.format(volume_id, blockdev))
-
-    #TODO: Not in use, remove?
-    def detach_volume(self, timeout_sec=3000, local_dev_timeout=30):
-        worker.log.debug('Detaching volume %s' % self.volume.id, self.task_id)
-        if self.volume is None:
-            raise FailureWithCode('This import does not have volume id', INPUT_DATA_FAILURE)
-        devices_before = worker.get_block_devices()
-        self.volume.update()
-        # Do not attempt to detach a volume which is not attached/attaching, or
-        # is not attached to this instance
-        this_instance_id = config.get_worker_id()
-        attached_state = self.volume.attachment_state()
-        if not attached_state \
-                or not attached_state.startswith('attach') \
-                or (hasattr(self.volume, 'attach_data')
-                    and self.volume.attach_data.instance_id != this_instance_id):
-            self.volume_attached_dev = None
-            return True
-        # Begin detaching from this instance
-        if not self.ec2_conn.detach_volume_and_wait(self.volume.id, timeout_sec=timeout_sec, task_id=self.task_id):
-            raise FailureWithCode('Can not detach volume %s' % self.volume.id, DETACH_VOLUME_FAILURE)
-        # If the attached dev is known, verify it is no longer present.
-        if self.volume_attached_dev:
-            elapsed = 0
-            start = time.time()
-            devices_after = devices_before
-            while elapsed < local_dev_timeout:
-                new_block_devices = worker.get_block_devices()
-                devices_after = list(set(devices_before) - set(new_block_devices))
-                if not self.volume_attached_dev in devices_after:
-                    break
-                else:
-                    time.sleep(2)
-                elapsed = time.time() - start
-            if self.volume_attached_dev in devices_after:
-                self.volume.update()
-                worker.log.error('Volume:"{0}" state:"{1}". Local device:"{2}"'
-                                 'found on guest after {3} seconds'
-                                 .format(self.volume.id,
-                                         self.volume.status,
-                                         self.volume.local_blockdev,
-                                         timeout_sec), self.task_id)
-                return False
-        return True
 
     def get_image_size_from_manifest(self):
         if "imaging@" not in self.manifest_url:
