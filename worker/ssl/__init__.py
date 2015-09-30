@@ -18,6 +18,7 @@
 
 import os
 
+
 def write_certificate(cert_file, cert_pem):
     if not os.path.exists(cert_file):
         f_cert = open(cert_file, 'w')

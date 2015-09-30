@@ -1,5 +1,6 @@
 from boto.resultset import ResultSet
 
+
 def match_name(name, param):
     if name == param or 'euca:%s' % name == param:
         return True

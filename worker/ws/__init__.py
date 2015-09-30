@@ -16,30 +16,28 @@
 # Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
-import boto
 import httplib
-import boto.utils
 from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
-from boto.iam.connection import IAMConnection
-from worker.ssl.server_cert import ServerCertificate
 from worker.ws.instance_import_task import InstanceImportTask
 import time
-import M2Crypto
 from defusedxml.ElementTree import fromstring
 import worker
 import worker.config as config
 from worker.task_exit_codes import *
 from worker.failure_with_code import FailureWithCode
 
-def connect_imaging_worker(host_name=config.get_imaging_service_url(), port=8773, path="services/Imaging", aws_access_key_id=None,
+
+def connect_imaging_worker(host_name=config.get_imaging_service_url(), port=8773, path="services/Imaging",
+                           aws_access_key_id=None,
                            aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaISConnection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                             aws_secret_access_key=aws_secret_access_key, security_token=security_token,
                             **kwargs)
 
 
-def connect_ec2(host_name=config.get_compute_service_url(), port=8773, path="services/Eucalyptus", aws_access_key_id=None,
+def connect_ec2(host_name=config.get_compute_service_url(), port=8773, path="services/Eucalyptus",
+                aws_access_key_id=None,
                 aws_secret_access_key=None, security_token=None, **kwargs):
     return EucaEC2Connection(host_name=host_name, port=port, path=path, aws_access_key_id=aws_access_key_id,
                              aws_secret_access_key=aws_secret_access_key, security_token=security_token,
@@ -105,8 +103,8 @@ class EucaEC2Connection(object):
         if hasattr(vol, "attach_data"):
             instance = str(vol.attach_data.instance_id)
         raise FailureWithCode('Volume:"{0}" failed to detach from:"{1}". '
-                           'Status:"{2}", elapsed: {3}/{4}'
-                           .format(vol.id, instance, vol.status, elapsed, timeout_sec), DETACH_VOLUME_FAILURE)
+                              'Status:"{2}", elapsed: {3}/{4}'
+                              .format(vol.id, instance, vol.status, elapsed, timeout_sec), DETACH_VOLUME_FAILURE)
 
     def attach_volume_and_wait(self,
                                volume_id,
@@ -130,28 +128,28 @@ class EucaEC2Connection(object):
             elapsed = time.time() - start
             # Catch failure states and raise error
             if elapsed > timeout_sec or \
-                vol.status == 'available' or \
+                            vol.status == 'available' or \
                     vol.status.startswith('delet'):
                 raise FailureWithCode('Failed to attach volume:"{0}" '
-                                   'to attach to:"{1}". Status:"{2}". '
-                                   'Elapsed:"{3}/{4}"'.format(volume_id,
-                                                          instance_id,
-                                                          vol.status,
-                                                          elapsed,
-                                                          timeout_sec), ATTACH_VOLUME_FAILURE)
+                                      'to attach to:"{1}". Status:"{2}". '
+                                      'Elapsed:"{3}/{4}"'.format(volume_id,
+                                                                 instance_id,
+                                                                 vol.status,
+                                                                 elapsed,
+                                                                 timeout_sec), ATTACH_VOLUME_FAILURE)
             time.sleep(poll_interval)
             vol = self.describe_volume(volume_id)
         # Final check for correct volume attachment
         attached_id = vol.attach_data.instance_id
         if attached_id != instance_id:
             raise FailureWithCode('Volume:"{0}" not attached to correct '
-                               'instance:"{1}". Status:"{2}". Attached:"{3}".'
-                               'Elapsed:"{4}/{5}"'.format(volume_id,
-                                                          instance_id,
-                                                          vol.status,
-                                                          attached_id,
-                                                          elapsed,
-                                                          timeout_sec), ATTACH_VOLUME_FAILURE)
+                                  'instance:"{1}". Status:"{2}". Attached:"{3}".'
+                                  'Elapsed:"{4}/{5}"'.format(volume_id,
+                                                             instance_id,
+                                                             vol.status,
+                                                             attached_id,
+                                                             elapsed,
+                                                             timeout_sec), ATTACH_VOLUME_FAILURE)
 
 
 class EucaISConnection(object):

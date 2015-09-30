@@ -37,6 +37,7 @@ Version = __version__
 log = CustomLog('worker')
 workflow_log = CustomLog('euca-workflow')
 
+
 def spin_locks():
     try:
         while not (os.path.exists("/var/lib/eucalyptus-imaging-worker/ntp.lock")):

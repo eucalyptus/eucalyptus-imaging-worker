@@ -162,6 +162,7 @@ class ImagingTask(object):
             task = VolumeImagingTask(import_task.task_id, manifest_url, volume_id, image_format)
         return task
 
+
 class VolumeImagingTask(ImagingTask):
     _GIG_ = 1073741824
 
@@ -175,7 +176,7 @@ class VolumeImagingTask(ImagingTask):
         self.volume = None
         self.volume_id = volume_id
         if self.volume_id:
-            self.volume = self.ec2_conn.conn.get_all_volumes([self.volume_id,'verbose'])
+            self.volume = self.ec2_conn.conn.get_all_volumes([self.volume_id, 'verbose'])
         if not self.volume:
             raise ValueError('Request for volume:"{0}" returned:"{1}"'
                              .format(volume_id, str(self.volume)))
@@ -450,7 +451,7 @@ class VolumeImagingTask(ImagingTask):
 
             else:
                 worker.log.error('No volume id is found for import-volume task')
-                return {'code': INPUT_DATA_FAILURE }
+                return {'code': INPUT_DATA_FAILURE}
 
             return {'code': TASK_DONE}
 
@@ -474,7 +475,7 @@ class VolumeImagingTask(ImagingTask):
         worker.log.debug('Waiting for download process', self.task_id)
         while not self.is_cancelled() and process.poll() is None:
             try:
-                 # get bytes transferred
+                # get bytes transferred
                 line = process.stderr.readline()
                 if line:
                     line = line.strip()

@@ -22,12 +22,13 @@ import worker.config as config
 from logging.handlers import RotatingFileHandler
 from logging.handlers import SysLogHandler
 
+
 class RestrictedPermissionRotatingFileHandler(RotatingFileHandler):
     def _open(self):
         """
         Override base class method to set 600 mod on a newly created log.
         """
-        umask=os.umask(0o066)
+        umask = os.umask(0o066)
         rfh = RotatingFileHandler._open(self)
         os.umask(umask)
         return rfh
@@ -65,7 +66,8 @@ if remote_server is not None and remote_port is not None:
     workflow_log.addHandler(remote_log_handler)
     log.info('Adder remote sys log handler')
 else:
-    log.warn('Remote sys log handler is not configured. Log server is set to %s with port %s ' % (remote_server, remote_port))
+    log.warn('Remote sys log handler is not configured. Log server is set to %s with port %s ' % (
+    remote_server, remote_port))
 
 
 def get_log_level_as_num(lvl):

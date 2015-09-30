@@ -1,6 +1,7 @@
 import worker
 import worker.config as config
 
+
 def attach_volume(instance_id=None, volume_id=None, device_name='/dev/vdc'):
     if not volume_id or not instance_id:
         print 'volume and instance id must be specified'
