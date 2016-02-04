@@ -39,5 +39,5 @@ The *eucalyptus-imaging-worker* service can be started by running:
     $ service eucalyptus-imaging-worker start
 
 Please Note: This service will **not** work unless it is running on a Eucalyptus
-instance that has been instantiated by the Eucalyptus Balancer service.
+instance that has been instantiated by the Eucalyptus Imaging service.
 
