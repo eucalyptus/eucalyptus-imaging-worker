@@ -26,7 +26,7 @@ import subprocess
 import sys
 import syslog
 import tempfile
-import worker.config as config
+import eucaimgworker.config as config
 
 
 SERVER_RE = re.compile(r'^server')

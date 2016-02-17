@@ -39,7 +39,7 @@ setup (name="Eucalyptus Imaging Worker",
     author_email = "community@eucalyptus.com",
     license = "GPL v3",
     url = "http://www.eucalytpus.com",
-    packages = ['worker', 'worker/ws', 'worker/floppy', 'worker/ssl' ],
+    packages = ['eucaimgworker', 'eucaimgworker/ws', 'eucaimgworker/floppy', 'eucaimgworker/ssl' ],
     scripts = ['eucalyptus-imaging-worker'],
     data_files = [('/etc/eucalyptus-imaging-worker/',['scripts/boto.cfg'])],
 )

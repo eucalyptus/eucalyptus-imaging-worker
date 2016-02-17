@@ -1,4 +1,4 @@
-# Copyright 2009-2014 Eucalyptus Systems, Inc.
+# (c) Copyright 2016 Hewlett Packard Enterprise Development Company LP
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -11,22 +11,19 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see http://www.gnu.org/licenses/.
-#
-
-# Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
-# CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
-# additional information or have any questions.
 import httplib
 from boto.ec2.regioninfo import RegionInfo
 from boto.ec2.connection import EC2Connection
-from worker.ws.instance_import_task import InstanceImportTask
+from eucaimgworker.ws.instance_import_task import InstanceImportTask
 import time
 from defusedxml.ElementTree import fromstring
-import worker
-import worker.config as config
-from worker.task_exit_codes import *
-from worker.failure_with_code import FailureWithCode
+import eucaimgworker.config as config
+from eucaimgworker.task_exit_codes import *
+from eucaimgworker.failure_with_code import FailureWithCode
+from eucaimgworker.logutil import CustomLog
+from eucaimgworker import LOGGER_NAME
 
+logger = CustomLog(LOGGER_NAME)
 
 def connect_imaging_worker(host_name=config.get_imaging_service_url(), port=8773, path="services/Imaging",
                            aws_access_key_id=None,
@@ -94,7 +91,7 @@ class EucaEC2Connection(object):
         while elapsed < timeout_sec:
             vol = self.describe_volume(volume_id)
             if vol.status == 'available' or vol.status.startswith('delet'):
-                worker.log.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
+                logger.debug('detach_volume_and_wait volume status: "%s"' % vol.status, process=task_id)
                 return
             time.sleep(5)
             elapsed = time.time() - start

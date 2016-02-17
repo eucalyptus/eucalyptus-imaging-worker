@@ -17,8 +17,12 @@
 # additional information or have any questions.
 import os
 import json
-import worker
-import worker.config as config
+import eucaimgworker.config as config
+from eucaimgworker.utils import run_as_sudo_with_grep, run_as_sudo
+from eucaimgworker.logutil import CustomLog
+from eucaimgworker import LOGGER_NAME
+
+logger = CustomLog(LOGGER_NAME)
 
 
 class FloppyCredential(object):
@@ -46,15 +50,15 @@ class FloppyCredential(object):
             self.euca_cert = cred['euca_pub_key']
             self.euca_cert = self.euca_cert.strip().decode('base64')
         except IOError, err:
-            worker.log.error('failed to read credential file on floppy: ' + str(err))
+            logger.error('failed to read credential file on floppy: ' + str(err))
             raise Exception()
         except Exception, err:
-            worker.log.error('failed to parse credential file: ' + str(err))
+            logger.error('failed to parse credential file: ' + str(err))
             raise Exception()
 
     @staticmethod
     def is_floppy_mounted(dev_str='/dev/fd0'):
-        if worker.run_as_sudo_with_grep('/bin/mount', dev_str) == 0:
+        if run_as_sudo_with_grep('/bin/mount', dev_str) == 0:
             return True
         else:
             return False
@@ -62,16 +66,16 @@ class FloppyCredential(object):
     def mount_floppy(self, dev='/dev/fd0', dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             os.makedirs(dir)
-        if worker.run_as_sudo('/bin/mount %s %s' % (dev, dir)) == 0:
-            worker.log.debug('floppy disk mounted on ' + dir, process=self.task_id)
+        if run_as_sudo('/bin/mount %s %s' % (dev, dir)) == 0:
+            logger.debug('floppy disk mounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to mount floppy')
 
     def unmount_floppy(self, dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             return
-        if worker.run_as_sudo('/bin/umount %s' % dir) == 0:
-            worker.log.debug('floppy disk unmounted on ' + dir, process=self.task_id)
+        if run_as_sudo('/bin/umount %s' % dir) == 0:
+            logger.debug('floppy disk unmounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to unmount floppy')
 

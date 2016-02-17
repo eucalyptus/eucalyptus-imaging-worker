@@ -1,4 +1,4 @@
-# Copyright 2009-2014 Eucalyptus Systems, Inc.
+# (c) Copyright 2016 Hewlett Packard Enterprise Development Company LP
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -11,17 +11,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see http://www.gnu.org/licenses/.
-#
-# Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
-# CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
-# additional information or have any questions.
 
 import logging
 import os
-import worker.config as config
+import eucaimgworker.config as config
 from logging.handlers import RotatingFileHandler
 from logging.handlers import SysLogHandler
-
+from eucaimgworker import LOGGER_NAME
 
 class RestrictedPermissionRotatingFileHandler(RotatingFileHandler):
     def _open(self):
@@ -40,7 +36,7 @@ class RestrictedPermissionRotatingFileHandler(RotatingFileHandler):
 LOG_FILE = '/var/log/eucalyptus-imaging-worker/worker.log'
 LOG_BYTES = 1024 * 1024  # 1MB
 
-log = logging.getLogger('worker')
+log = logging.getLogger(LOGGER_NAME)
 boto_log = logging.getLogger('boto')
 workflow_log = logging.getLogger('euca-workflow')
 log.setLevel(logging.INFO)
