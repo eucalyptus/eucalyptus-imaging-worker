@@ -1,4 +1,4 @@
-# Copyright 2009-2014 Eucalyptus Systems, Inc.
+# (c) Copyright 2016 Hewlett Packard Enterprise Development Company LP
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -11,10 +11,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see http://www.gnu.org/licenses/.
-#
-# Please contact Eucalyptus Systems, Inc., 6755 Hollister Ave., Goleta
-# CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
-# additional information or have any questions.
 import time
 import json
 import os
@@ -24,18 +20,22 @@ import fcntl
 import re
 import requests
 import config
-import worker
+import eucaimgworker
 import subprocess
 import traceback
 import httplib2
 import threading
 import tempfile
 from defusedxml.ElementTree import fromstring
-import worker.ssl
+import eucaimgworker.ssl
 from task_exit_codes import *
-from worker.failure_with_code import FailureWithCode
-from worker.floppy import FloppyCredential
+from eucaimgworker.failure_with_code import FailureWithCode
+from eucaimgworker.floppy import FloppyCredential
+from eucaimgworker.logutil import CustomLog
+from eucaimgworker import LOGGER_NAME
+from eucaimgworker.utils import get_block_devices
 
+logger = CustomLog(LOGGER_NAME)
 
 class TaskThread(threading.Thread):
     def __init__(self, function):
@@ -62,7 +62,7 @@ class ImagingTask(object):
     def __init__(self, task_id, task_type):
         self.task_id = task_id
         self.task_type = task_type
-        self.is_conn = worker.ws.connect_imaging_worker(aws_access_key_id=config.get_access_key_id(),
+        self.is_conn = eucaimgworker.ws.connect_imaging_worker(aws_access_key_id=config.get_access_key_id(),
                                                         aws_secret_access_key=config.get_secret_access_key(),
                                                         security_token=config.get_security_token())
         self.should_run = True
@@ -90,7 +90,7 @@ class ImagingTask(object):
             for f in glob.iglob('/mnt/imaging/*'):
                 os.remove(f) if os.path.isfile(f) else shutil.rmtree(f)
         except Exception, err:
-            worker.log.error("Can't clean up /mnt/imaging/ due to {0}".format(str(err)))
+            logger.error("Can't clean up /mnt/imaging/ due to {0}".format(str(err)))
 
     def process_task(self):
         self.prepare()
@@ -99,7 +99,7 @@ class ImagingTask(object):
         while self.task_thread.is_alive():
             time.sleep(self.EXTANT_STATUS_REPORT_INTERVAL)
             if not self.report_running():  # cancelled by imaging service
-                worker.log.debug('task is cancelled by imaging service', self.task_id)
+                logger.debug('task is cancelled by imaging service', self.task_id)
                 self.cancel()
         if not self.is_cancelled():
             run_result = self.task_thread.get_result()
@@ -120,7 +120,7 @@ class ImagingTask(object):
         try:
             self.cancel_cleanup()  # any task specific cleanup
         except Exception, err:
-            worker.log.warn('Failed to cleanup task after cancellation: %s' % err, self.task_id)
+            logger.warn('Failed to cleanup task after cancellation: %s' % err, self.task_id)
 
     def is_cancelled(self):
         return not self.should_run
@@ -150,7 +150,7 @@ class ImagingTask(object):
         task = None
         f = FloppyCredential(task_id=import_task.task_id)
         ec2_cert_path = '%s/cloud-cert.pem' % config.RUN_ROOT
-        worker.ssl.write_certificate(ec2_cert_path, f.get_cloud_cert())
+        eucaimgworker.ssl.write_certificate(ec2_cert_path, f.get_cloud_cert())
         if import_task.task_type == "import_volume" and import_task.volume_task:
             volume_id = import_task.volume_task.volume_id
             manifests = import_task.volume_task.image_manifests
@@ -169,7 +169,7 @@ class VolumeImagingTask(ImagingTask):
     def __init__(self, task_id, manifest_url=None, volume_id=None, input_format=ImagingTask.RAW_FORMAT):
         ImagingTask.__init__(self, task_id, "import_volume")
         self.manifest_url = manifest_url
-        self.ec2_conn = worker.ws.connect_ec2(
+        self.ec2_conn = eucaimgworker.ws.connect_ec2(
             aws_access_key_id=config.get_access_key_id(),
             aws_secret_access_key=config.get_secret_access_key(),
             security_token=config.get_security_token())
@@ -196,11 +196,11 @@ class VolumeImagingTask(ImagingTask):
     def get_partition_size(self, partition):
         p = subprocess.Popen(["sudo", "blockdev", "--getsize64", partition], stdout=subprocess.PIPE)
         t = p.communicate()[0]
-        worker.log.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition), self.task_id)
+        logger.debug('The blockdev reported %s for %s' % (t.rstrip('\n'), partition), self.task_id)
         return int(t.rstrip('\n'))
 
     def add_write_permission(self, partition):
-        worker.log.debug('Setting permissions for %s' % partition)
+        logger.debug('Setting permissions for %s' % partition)
         subprocess.call(["sudo", "chmod", "a+w", partition])
 
 
@@ -252,9 +252,9 @@ class VolumeImagingTask(ImagingTask):
         if not self.volume:
             raise FailureWithCode('This import does not have a volume', INPUT_DATA_FAILURE)
         instance_id = self.instance_id
-        devices_before = worker.get_block_devices()
+        devices_before = get_block_devices()
         device_name = self.next_device_name(devices_before)
-        worker.log.debug('Attaching volume {0} to {1} as {2}'.
+        logger.debug('Attaching volume {0} to {1} as {2}'.
                          format(self.volume.id, instance_id, device_name), self.task_id)
         self.ec2_conn.attach_volume_and_wait(self.volume.id,
                                              instance_id,
@@ -262,8 +262,8 @@ class VolumeImagingTask(ImagingTask):
         elapsed = 0
         start = time.time()
         while elapsed < local_dev_timeout and not new_device_name:
-            new_block_devices = worker.get_block_devices()
-            worker.log.debug('Waiting for local dev for volume: "{0}", '
+            new_block_devices = get_block_devices()
+            logger.debug('Waiting for local dev for volume: "{0}", '
                              'elapsed:{1}'.format(self.volume.id, elapsed), self.task_id)
             diff_list = list(set(new_block_devices) - set(devices_before))
             if diff_list:
@@ -311,7 +311,7 @@ class VolumeImagingTask(ImagingTask):
                 if serial.startswith(volume_id):
                     break
         if os.path.basename(blockdev) == devdir:
-            worker.log.debug('Validated volume:"{0}" at dev:"{1}" '
+            logger.debug('Validated volume:"{0}" at dev:"{1}" '
                              'via serial number: '
                              .format(volume_id, blockdev), self.task_id)
             return
@@ -347,7 +347,7 @@ class VolumeImagingTask(ImagingTask):
                   '--cloud-cert-path', cloud_cert_path]
         if not validate_size:
             params.append('--skip-size-validation')
-        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
+        logger.debug('Running %s' % ' '.join(params), self.task_id)
         # create process with system default buffer size and make its stderr non-blocking
         self.process = subprocess.Popen(params, stderr=subprocess.PIPE)
         fd = self.process.stderr
@@ -375,12 +375,12 @@ class VolumeImagingTask(ImagingTask):
                                                   image_size), INPUT_DATA_FAILURE)
                 if self.is_cancelled():
                     return {'code': TASK_CANCELED}
-                worker.log.info('Attaching volume %s' % self.volume.id, self.task_id)
+                logger.info('Attaching volume %s' % self.volume.id, self.task_id)
                 device_to_use = self.attach_volume()
-                worker.log.debug('Using %s as destination' % device_to_use, self.task_id)
+                logger.debug('Using %s as destination' % device_to_use, self.task_id)
                 device_size = self.get_partition_size(device_to_use)
-                worker.log.debug('Attached device size is %d bytes' % device_size, self.task_id)
-                worker.log.debug('Needed for image/volume %d bytes' % image_size, self.task_id)
+                logger.debug('Attached device size is %d bytes' % device_size, self.task_id)
+                logger.debug('Needed for image/volume %d bytes' % image_size, self.task_id)
                 download_file = None
                 if image_size > device_size:
                     raise FailureWithCode('Device is too small for the image/volume', INPUT_DATA_FAILURE)
@@ -406,21 +406,21 @@ class VolumeImagingTask(ImagingTask):
                         # download manifest for VMDK import has size for unpacked image, skipp size validation
                         self.start_download_process(self.manifest_url, download_file.name, validate_size=False)
                 except Exception, err:
-                    worker.log.error('Failure to start workflow process %s' % err)
+                    logger.error('Failure to start workflow process %s' % err)
                     return {'code': err.failure_code, 'message': err.message}
                 if self.process is not None:
                     self.wait_with_status(self.process)
                 else:
-                    worker.log.error('Cannot start workflow process')
+                    logger.error('Cannot start workflow process')
                     return {'code': WORKFLOW_FAILURE}
                 if self.process.returncode is None:
                     if self.is_cancelled():
                         return {'code': TASK_CANCELED}
                     else:
-                        worker.log.error('Process was killed')
+                        logger.error('Process was killed')
                         return {'code': WORKFLOW_FAILURE}
                 elif self.process.returncode != 0:
-                    worker.log.error('Return code from the workflow process is not 0. Code: %d'
+                    logger.error('Return code from the workflow process is not 0. Code: %d'
                                      % self.process.returncode)
                     return {'code': WORKFLOW_FAILURE}
 
@@ -428,36 +428,36 @@ class VolumeImagingTask(ImagingTask):
                     try:
                         raw_file_name = download_file.name + '.raw'
                         params = ['qemu-img', 'convert', '-O', 'raw', download_file.name, raw_file_name]
-                        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
+                        logger.debug('Running %s' % ' '.join(params), self.task_id)
                         df = subprocess.Popen(params, stdout=subprocess.PIPE)
                         output = df.communicate()[0]
                         if df.returncode != 0:
-                            worker.log.error('Failed to run VMDK conversion process: %s' % output)
+                            logger.error('Failed to run VMDK conversion process: %s' % output)
                             return {'code': WORKFLOW_FAILURE}
-                        worker.log.debug("Removing tmp VMDK file")
+                        logger.debug("Removing tmp VMDK file")
                         os.remove(download_file.name)
                         params = ['dd', 'if=%s' % raw_file_name, 'of=%s' % device_to_use, 'bs=10M']
-                        worker.log.debug('Running %s' % ' '.join(params), self.task_id)
+                        logger.debug('Running %s' % ' '.join(params), self.task_id)
                         df = subprocess.Popen(params, stderr=subprocess.PIPE)
                         output = df.communicate()[0]
                         if df.returncode != 0:
-                            worker.log.error('Failed to move converted image to attached device %s' % output)
+                            logger.error('Failed to move converted image to attached device %s' % output)
                             return {'code': WORKFLOW_FAILURE}
-                        worker.log.debug("Removing tmp RAW file")
+                        logger.debug("Removing tmp RAW file")
                         os.remove(raw_file_name)
                     except Exception, err:
-                        worker.log.error('Failure to convert VMDK to RAW or transfer file to volume %s' % err)
+                        logger.error('Failure to convert VMDK to RAW or transfer file to volume %s' % err)
                         return {'code': WORKFLOW_FAILURE}
 
             else:
-                worker.log.error('No volume id is found for import-volume task')
+                logger.error('No volume id is found for import-volume task')
                 return {'code': INPUT_DATA_FAILURE}
 
             return {'code': TASK_DONE}
 
         except Exception, err:
             tb = traceback.format_exc()
-            worker.log.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
+            logger.error(str(tb) + '\nFailed to process task: %s' % err, self.task_id)
             if type(err) is FailureWithCode:
                 return {'code': err.failure_code, 'message': err.message}
             else:
@@ -465,14 +465,14 @@ class VolumeImagingTask(ImagingTask):
 
         finally:
             if device_to_use is not None and self.volume_id:
-                worker.log.info('Detaching volume %s' % self.volume_id, self.task_id)
+                logger.info('Detaching volume %s' % self.volume_id, self.task_id)
                 try:
                     self.ec2_conn.detach_volume_and_wait(volume_id=self.volume_id, task_id=self.task_id)
                 except Exception:
                     return {'code': DETACH_VOLUME_FAILURE}
 
     def wait_with_status(self, process):
-        worker.log.debug('Waiting for download process', self.task_id)
+        logger.debug('Waiting for download process', self.task_id)
         while not self.is_cancelled() and process.poll() is None:
             try:
                 # get bytes transferred
@@ -483,11 +483,11 @@ class VolumeImagingTask(ImagingTask):
                         res = json.loads(line)
                         self.bytes_transferred = res['status']['bytes_downloaded']
                     except Exception, ex:
-                        worker.log.warn(
+                        logger.warn(
                             "Download image subprocess reports invalid status. Output: %s. Error: %s" % (line, ex),
                             self.task_id)
                     if self.bytes_transferred:
-                        worker.log.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred),
+                        logger.debug("Status %s, bytes transferred: %d" % (line, self.bytes_transferred),
                                          self.task_id)
             except:
                 pass

@@ -21,9 +21,15 @@
 import os
 import sys
 import getopt
-import worker
-import worker.config as config
+import eucaimgworker
+import eucaimgworker.config as config
+from eucaimgworker.config import set_pidfile, set_boto_config
+from eucaimgworker.logutil import CustomLog, set_loglevel, set_boto_loglevel, set_log_file_count, set_log_file_size
+from eucaimgworker.main_loop import start_worker
+from eucaimgworker import LOGGER_NAME
 
+
+logger = CustomLog(LOGGER_NAME)
 
 def daemonize(func=None):
     # Fork process
@@ -63,14 +69,14 @@ def daemonize(func=None):
         f.write(str(os.getpid()))
         f.flush()
     except IOError:
-        worker.log.error("Failed to write pidfile %s", config.pidfile)
+        logger.error("Failed to write pidfile %s", config.pidfile)
         sys.exit(1)
 
     signal.signal(signal.SIGTERM, cleanpid)
     atexit.register(cleanpid)
 
     if func:
-        worker.log.info("Starting daemonized worker process")
+        logger.info("Starting daemonized imaging worker process")
         func()
 
 
@@ -101,28 +107,28 @@ if __name__ == "__main__":
             if arg == "-d" or arg == "--daemonize":
                 daemon = True
             elif arg == "-p" or arg == "--pidfile":
-                worker.set_pidfile(value)
+                set_pidfile(value)
             elif arg == "-l" or arg == "--log-level":
-                worker.set_loglevel(value)
+                set_loglevel(value)
             elif arg == "-b" or arg == "--boto-log-level":
-                worker.set_boto_loglevel(value)
+                set_boto_loglevel(value)
             elif arg == "-c" or arg == "--boto-config":
-                worker.set_boto_config(value)
+                set_boto_config(value)
             elif arg == "-f":
-                worker.set_log_file_count(value)
+                set_log_file_count(value)
             elif arg == "-s":
-                worker.set_log_file_size(value)
+                set_log_file_size(value)
             elif arg == "-h" or arg == "--help":
                 usage()
     except getopt.GetoptError:
         usage()
 
     if daemon:
-        daemonize(worker.start_worker)
+        daemonize(start_worker)
     else:
         try:
-            worker.log.info("Starting Imaging Service")
-            worker.start_worker()
+            logger.info("Starting Imaging Service")
+            start_worker()
         except KeyboardInterrupt:
-            worker.log.info("Interrupted By User")
+            logger.info("Interrupted By User")
             sys.exit(0)
