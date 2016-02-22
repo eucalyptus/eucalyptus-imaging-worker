@@ -66,7 +66,7 @@ class FloppyCredential(object):
     def mount_floppy(self, dev='/dev/fd0', dir=config.FLOPPY_MOUNT_DIR):
         if not os.path.exists(dir):
             os.makedirs(dir)
-        if run_as_sudo('/bin/mount -o dmask=022,fmask=333 %s %s' % (dev, dir)) == 0:
+        if run_as_sudo('/bin/mount -o uid=%d %s %s' % (os.geteuid(), dev, dir)) == 0:
             logger.debug('floppy disk mounted on ' + dir, process=self.task_id)
         else:
             raise Exception('failed to mount floppy')
