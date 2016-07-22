@@ -1,7 +1,7 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 
 Name:           eucalyptus-imaging-worker
-Version:        %{build_version}
+Version:        0.2.2
 Release:        0%{?build_id:.%build_id}%{?dist}
 Summary:        Configuration tool for the Eucalyptus Imaging Service
 
@@ -100,6 +100,9 @@ fi
 %config(noreplace) %{_sysconfdir}/%{name}/boto.cfg
 
 %changelog
+* Fri Jul 22 2016 Garrett Holmstrom <gholms@hpe.com> - 0.2.2
+- Version bump (0.2.2)
+
 * Tue Dec 16 2014 Eucalyptus Release Engineering <support@eucalyptus.com> - 0.0.1
 - Added chkconfig changes
 
